@@ -66,5 +66,49 @@ present, `holeInterpretation` defined, `interpretedType` defaults to
 (Phase 5 scope, alongside `dicom/port.ts` and tolerant-reading diagnostics
 like `MISSING_RT_ROI_OBSERVATIONS`).
 
-Next step: Phase 5 — DICOM read/write (`IO-01…08`, plus a fixture builder
-for the test suite).
+Phase 5 (DICOM read/write) is implemented and green: `dicom/port.ts` (the
+only `dcmjs` importer), rewired `RTStructImpl.load`/`.createFromMask`
+(replacing the Phase 4 private JSON wire format entirely), and
+`tests/fixtures.ts`'s `buildFixture` (wired in as a real `globalThis`
+global via `tests/setup.ts` + `vitest.config.ts`'s `setupFiles`, since
+`io.test.ts` references it as an untyped ambient global, not an import).
+
+Two non-obvious correctness issues surfaced and were fixed:
+
+- **ROI name padding ambiguity.** DICOM's LO VR pads odd-length values with
+  one trailing space to reach even byte length, and PS3.5 defines trailing
+  space as non-significant — so a standards-compliant reader (dcmjs's
+  `naturalizeDataset`) always strips it, silently breaking "never normalize
+  ROI names" for names that end in a *genuine* space (IO-04's `"gtv_p "`),
+  while `forceStoreRaw`'s untrimmed `_rawValue` alone breaks odd-length
+  names by keeping padding that was never real content (`"PHANTOM"` came
+  back `"PHANTOM "`, which then failed RT-01…05's `getMask("PHANTOM")`).
+  Neither "always trim" nor "never trim" is correct — the two cases are
+  genuinely indistinguishable from the stored bytes alone. Fixed by writing
+  the name's exact character count into a private tag (`(0009,1001)`,
+  unregistered, self-consistent — only our own reader ever looks at it) and
+  comparing it against the raw value's length on read: equal lengths mean
+  no padding was added (keep the raw value, trailing space and all); a
+  1-character excess means padding was added (strip exactly it).
+- **DS 16-character limit.** Full-precision floats from `vectorize()` (e.g.
+  `-1.4849242404917504`) silently truncated when written as ContourData,
+  which is capped at 16 characters — dcmjs slices the string blind, not the
+  number. Fixed by rounding every coordinate to 6 decimal places before
+  writing, which is far more precision than any of this project's tolerance
+  gates need and stays safely under the limit for realistic coordinate
+  magnitudes.
+
+`npx vitest run` reports **44/44 passing — v0.1 complete** per
+IMPLEMENTATION_PLAN.md section 8's exit criteria (test-wise; still needs a
+license decision and its own final review pass, see the root README).
+
+**Caveat carried over from `npm install dcmjs`:** it declares
+`engines.node >= 22.13` while this environment runs Node 20.10.0 (a
+warning, not a hard failure — the full test suite passes on 20.10.0
+regardless) and pulls in `adm-zip`, which carries a high-severity advisory
+(crafted ZIP triggers ~4GB allocation). `dicom/port.ts` never touches
+dcmjs's zip/anonymizer/DICOMDIR features — only `DicomDict`, `DicomMessage`,
+`DicomMetaDictionary` — so the vulnerable code path is never reached here,
+but it's worth knowing about before deploying this anywhere further. The
+only clean fix is downgrading to `dcmjs@0.29.6`, a semver-major step
+backward; not done without being asked.

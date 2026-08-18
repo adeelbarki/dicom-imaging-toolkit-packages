@@ -1,16 +1,8 @@
-import type { Contour } from "./contour/types.js";
 import { rasterize } from "./contour/rasterize.js";
 import { vectorize } from "./contour/vectorize.js";
-import { NotImplementedError } from "./errors.js";
-import type {
-  Diagnostic,
-  DicomVolumeResult,
-  GridGeometry,
-  LoadOptions,
-  Mask3D,
-  Provenance,
-  RoiHandle,
-} from "./types.js";
+import { createDiagnostic } from "./diagnostics/index.js";
+import { readRTStruct, writeRTStruct } from "./dicom/port.js";
+import type { Diagnostic, DicomVolumeResult, GridGeometry, LoadOptions, Mask3D, Provenance, RoiHandle } from "./types.js";
 
 export interface LoadParams extends LoadOptions {
   readonly rtstruct: ArrayBuffer;
@@ -29,50 +21,60 @@ interface StoredRoi {
   readonly mask: Mask3D;
   readonly provenance: Provenance;
   readonly diagnostics: readonly Diagnostic[];
+  readonly volumeCm3: number | undefined;
 }
 
-/**
- * Phase 4 wire format: `vectorize()` output serialized as JSON, not DICOM.
- * It exists only to drive the mask -> RTSTRUCT -> mask gate (RT-01..05)
- * before real DICOM I/O exists. Phase 5 replaces load()/createFromMask()
- * with dicom/port.ts; vectorize()/rasterize() themselves do not change.
- */
-interface WireRoi {
-  readonly name: string;
-  readonly contours: readonly Contour[];
-}
-interface WireFormat {
-  readonly rois: readonly WireRoi[];
-}
-
-/** The public entry point (IMPLEMENTATION_PLAN.md section 1). Phase 5 wires this to dicom/port.ts. */
+/** The public entry point (IMPLEMENTATION_PLAN.md section 1). Wired to dicom/port.ts. */
 export class RTStructImpl {
   private readonly rois: ReadonlyMap<string, StoredRoi>;
+  private readonly documentDiagnostics: readonly Diagnostic[];
 
-  private constructor(rois: ReadonlyMap<string, StoredRoi>) {
+  private constructor(rois: ReadonlyMap<string, StoredRoi>, documentDiagnostics: readonly Diagnostic[]) {
     this.rois = rois;
+    this.documentDiagnostics = documentDiagnostics;
   }
 
   static async load(params: LoadParams): Promise<RTStructImpl> {
-    const wire = JSON.parse(new TextDecoder().decode(params.rtstruct)) as WireFormat;
+    const parsed = readRTStruct(params.rtstruct);
+
+    const documentDiagnostics: Diagnostic[] = [];
+    if (parsed.missingRTROIObservations) {
+      documentDiagnostics.push(
+        createDiagnostic(
+          "MISSING_RT_ROI_OBSERVATIONS",
+          "info",
+          "RTROIObservationsSequence is absent (Type 3 in PS3.3 2026c); RTROIInterpretedType defaults to ORGAN",
+        ),
+      );
+    }
+
     const rois = new Map<string, StoredRoi>();
-    wire.rois.forEach((entry, i) => {
-      const result = rasterize(entry.contours, params.geometry);
-      rois.set(entry.name, {
-        name: entry.name,
-        roiNumber: i + 1,
-        interpretedType: "ORGAN",
+    for (const roi of parsed.rois) {
+      const result = rasterize(roi.contours, params.geometry);
+      const diagnostics = [...result.diagnostics];
+      if (roi.contours.length === 0) {
+        diagnostics.push(
+          createDiagnostic("EMPTY_ROI", "warning", `ROI ${JSON.stringify(roi.name)} has no ContourSequence`, {
+            roiNumber: roi.roiNumber,
+          }),
+        );
+      }
+      rois.set(roi.name, {
+        name: roi.name,
+        roiNumber: roi.roiNumber,
+        interpretedType: roi.interpretedType,
         mask: result.mask,
         provenance: result.provenance,
-        diagnostics: result.diagnostics,
+        diagnostics,
+        volumeCm3: roi.volumeCm3,
       });
-    });
-    return new RTStructImpl(rois);
+    }
+
+    return new RTStructImpl(rois, documentDiagnostics);
   }
 
   static async createFromMask(params: CreateFromMaskParams): Promise<ArrayBuffer> {
-    const wire: WireFormat = { rois: [{ name: params.name, contours: vectorize(params.mask) }] };
-    return new TextEncoder().encode(JSON.stringify(wire)).buffer as ArrayBuffer;
+    return writeRTStruct({ rois: [{ name: params.name, contours: vectorize(params.mask) }] });
   }
 
   private getRoi(name: string): StoredRoi {
@@ -82,7 +84,7 @@ export class RTStructImpl {
   }
 
   get diagnostics(): readonly Diagnostic[] {
-    return [...this.rois.values()].flatMap((roi) => roi.diagnostics);
+    return [...this.documentDiagnostics, ...[...this.rois.values()].flatMap((roi) => roi.diagnostics)];
   }
 
   getROINames(): readonly string[] {
@@ -108,7 +110,9 @@ export class RTStructImpl {
     return this.getRoi(name).mask.getSliceBuffer(planeIndex);
   }
 
-  dicomVolume(_name: string): DicomVolumeResult | undefined {
-    throw new NotImplementedError("dicomVolume is not implemented yet (Phase 5)");
+  /** Never computed from the mask — absent unless the file itself declared ROI Volume (3006,002C). */
+  dicomVolume(name: string): DicomVolumeResult | undefined {
+    const volumeCm3 = this.getRoi(name).volumeCm3;
+    return volumeCm3 === undefined ? undefined : { value: volumeCm3, unit: "cm3", source: "DICOM ROI Volume (3006,002C)" };
   }
 }

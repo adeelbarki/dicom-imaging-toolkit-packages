@@ -6,12 +6,15 @@ known closed-form volumes, not against vendor fixtures — there is no vendor
 DICOM in this repository (no PHI, no licensing question, and vendor files
 carry no ground truth anyway).
 
-**Status:** v0.1 in development, not yet published. See
-[`.claude/IMPLEMENTATION_PLAN.md`](.claude/IMPLEMENTATION_PLAN.md) for the
-full phase order and scope. Phases 1–4 (geometry, mask/phantoms,
-rasterization, vectorization/round trip) are complete. `RTStructImpl`
-currently reads/writes a private JSON wire format, not real DICOM — that's
-Phase 5, the only remaining phase.
+**Status:** v0.1 feature-complete (44/44 tests green) but not yet
+published. See [`.claude/IMPLEMENTATION_PLAN.md`](.claude/IMPLEMENTATION_PLAN.md)
+for the full phase order and scope — all five phases are done, including
+real DICOM read/write via `dicom/port.ts`. `dcmjs` (the only DICOM
+dependency, imported nowhere else) currently pulls in a high-severity
+transitive advisory via `adm-zip` and declares a newer Node engine
+requirement than this project targets; see `.claude/README.md` for the
+detail. Neither affects `dicom/port.ts`'s actual code path, but resolving
+or accepting that tradeoff is worth a decision before shipping.
 
 **Standard pinned:** DICOM PS3.3 **2026c**.
 
@@ -40,8 +43,9 @@ src/
 ├── mask/                    Mask3D implementation
 ├── diagnostics/
 ├── phantom/                  cube, sphere, torus + analytic volumes
-└── dicom/                    the only dcmjs importer (once added)
+└── dicom/port.ts             the only dcmjs importer
 tests/unit/                   spec tests, organized by area (GEO/MSK/VOL/CTR/RT/IO/SEC)
+tests/fixtures.ts             builds DICOM bytes at test time via dicom/port.ts (no vendor files)
 ```
 
 `geometry/`, `contour/`, `mask/`, `roi/`, `phantom/` must never import from
