@@ -30,10 +30,21 @@ VOL-01/VOL-02. VOL-04 now genuinely exercises `cubePhantom` before hitting
 the intended `NotImplementedError` on `{method: "contour"}`, no longer a
 technicality.
 
-`npx vitest run` reports 26/44 passing: all 16 GEO-*, SEC-01, SEC-02,
-MSK-01…04, VOL-01…04. Everything else (`CTR-*`, `RT-*`, `IO-*`) still
-throws `NotImplementedError` as expected for Phase 3/4/5.
+Phase 3 (rasterization and holes) is implemented and green:
+`contour/rasterize.ts`. All three hole encodings (nested `CLOSED_PLANAR`,
+`CLOSEDPLANAR_XOR`, keyhole) reduce to one algorithm — combine every
+fillable contour's edges on a plane into a single list and run an even-odd
+ray-cast with the half-open rule (`y0 <= y < y1`) per pixel center. Parity
+is direction- and winding-independent, so nested rings and XOR pairs are
+handled identically; a keyhole's out-and-back channel edges cancel exactly
+under the half-open rule instead of double-counting and filling the hole
+solid. `holeInterpretation` is recorded as a provenance label only — it
+does not change which algorithm runs.
+
+`npx vitest run` reports 31/44 passing: all 16 GEO-*, SEC-01, SEC-02,
+MSK-01…04, VOL-01…04, CTR-01…05. Only `RT-*` (Phase 4) and `IO-*`
+(Phase 5) remain, throwing `NotImplementedError` as expected.
 `spherePhantom`/`torusPhantom` remain stubs — deferred to Phase 4, where
 `RT-*` needs them alongside the real round trip.
 
-Next step: Phase 3 — rasterization and holes (`CTR-01…05`).
+Next step: Phase 4 — vectorization and round trip (`RT-01…05`).
