@@ -18,12 +18,22 @@ The real tree now exists at the repo root (`src/`, `tests/`, `package.json`,
 this `spec/` folder is kept only as the original staged snapshot.
 
 Phase 1 (geometry core) is implemented and green: `vec3.ts`, `tolerance.ts`,
-`grid-geometry.ts`, `plane-sort.ts`. `npx vitest run` currently reports
-18/44 passing — all 16 GEO-* tests plus SEC-02 (depends only on
-`diagnostics/` + `plane-sort.ts`) pass legitimately; VOL-04 passes on a
-technicality (the `cubePhantom` stub's `NotImplementedError` message happens
-to match the test's regex before `.volume()` is ever reached — revisit once
-Phase 2 implements `cubePhantom` for real). Everything else still throws
-`NotImplementedError` as expected for its later phase.
+`grid-geometry.ts`, `plane-sort.ts`.
 
-Next step: Phase 2 — mask and phantoms (`MSK-*`, `VOL-*`, `SEC-01`).
+Phase 2 (mask and phantoms) is implemented and green: `mask/mask3d.ts`
+(`createEmptyMask`/`maskFromDense`, with the SEC-01 voxel-count check run
+*before* allocation) and `cubePhantom` in `phantom/index.ts`. Per-plane
+thickness is the average distance to neighboring planes (falls back to the
+single-neighbor distance at the ends of the stack), which reduces to the
+uniform slice spacing for `createUniformGrid` grids — confirmed exactly by
+VOL-01/VOL-02. VOL-04 now genuinely exercises `cubePhantom` before hitting
+the intended `NotImplementedError` on `{method: "contour"}`, no longer a
+technicality.
+
+`npx vitest run` reports 26/44 passing: all 16 GEO-*, SEC-01, SEC-02,
+MSK-01…04, VOL-01…04. Everything else (`CTR-*`, `RT-*`, `IO-*`) still
+throws `NotImplementedError` as expected for Phase 3/4/5.
+`spherePhantom`/`torusPhantom` remain stubs — deferred to Phase 4, where
+`RT-*` needs them alongside the real round trip.
+
+Next step: Phase 3 — rasterization and holes (`CTR-01…05`).

@@ -8,9 +8,9 @@ carry no ground truth anyway).
 
 **Status:** v0.1 in development, not yet published. See
 [`.claude/IMPLEMENTATION_PLAN.md`](.claude/IMPLEMENTATION_PLAN.md) for the
-full phase order and scope. Phase 1 (geometry core) is complete; everything
-downstream (mask/phantom generation, rasterization, DICOM I/O) is still
-`NotImplementedError` stubs.
+full phase order and scope. Phase 1 (geometry core) and Phase 2 (mask,
+cube phantom) are complete; rasterization, sphere/torus phantoms, and DICOM
+I/O are still `NotImplementedError` stubs.
 
 **Standard pinned:** DICOM PS3.3 **2026c**.
 
