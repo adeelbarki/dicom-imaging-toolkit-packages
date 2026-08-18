@@ -41,10 +41,30 @@ under the half-open rule instead of double-counting and filling the hole
 solid. `holeInterpretation` is recorded as a provenance label only — it
 does not change which algorithm runs.
 
-`npx vitest run` reports 31/44 passing: all 16 GEO-*, SEC-01, SEC-02,
-MSK-01…04, VOL-01…04, CTR-01…05. Only `RT-*` (Phase 4) and `IO-*`
-(Phase 5) remain, throwing `NotImplementedError` as expected.
-`spherePhantom`/`torusPhantom` remain stubs — deferred to Phase 4, where
-`RT-*` needs them alongside the real round trip.
+Phase 4 (vectorization and round trip) is implemented and green:
+`contour/vectorize.ts`, `metrics.ts`, `spherePhantom`/`torusPhantom`, and
+`RTStructImpl.load`/`.createFromMask` in `src/index.ts`.
 
-Next step: Phase 4 — vectorization and round trip (`RT-01…05`).
+`vectorize()` traces each filled cell's boundary edges in the unit-square
+lattice (a cell at (row, column) occupies the square centered on it, with
+corners at half-integer offsets) and stitches them into closed loops —
+this is the exact inverse of `rasterize()`'s point-sampling: boundaries
+always sit at half-integer coordinates, so they never touch the integer
+sample points rasterize() tests, and the round trip is exact rather than
+approximate for a single mask <-> contour <-> mask pass. `RTStructImpl`
+wraps `vectorize()`'s output in a **private JSON wire format** (not DICOM)
+to drive the round trip — this is scaffolding only; Phase 5 replaces
+`load()`/`createFromMask()` with real `dicom/port.ts` I/O, but
+`vectorize()`/`rasterize()` themselves do not change.
+
+`npx vitest run` reports 39/44 passing: everything through Phase 4,
+including RT-01…05. It also incidentally passes IO-06/07/08, since those
+only exercise `createFromMask()` → `load()` behavior (three sequences
+present, `holeInterpretation` defined, `interpretedType` defaults to
+`ORGAN`) rather than real DICOM bytes. IO-01…05 remain — they need
+`buildFixture`, a real DICOM fixture builder that doesn't exist yet
+(Phase 5 scope, alongside `dicom/port.ts` and tolerant-reading diagnostics
+like `MISSING_RT_ROI_OBSERVATIONS`).
+
+Next step: Phase 5 — DICOM read/write (`IO-01…08`, plus a fixture builder
+for the test suite).

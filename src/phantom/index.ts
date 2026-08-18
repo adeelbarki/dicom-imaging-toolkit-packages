@@ -1,5 +1,4 @@
-import { NotImplementedError } from "../errors.js";
-import { add, dot, scale, sub } from "../geometry/vec3.js";
+import { add, dot, length, scale, sub } from "../geometry/vec3.js";
 import { maskFromDense } from "../mask/mask3d.js";
 import type { GridGeometry, Mask3D, Vec3 } from "../types.js";
 
@@ -45,13 +44,49 @@ export function cubePhantom(grid: GridGeometry, sideMm: number): Mask3D {
   return maskFromDense(grid, data);
 }
 
-export function spherePhantom(_grid: GridGeometry, _radiusMm: number): Mask3D {
-  throw new NotImplementedError("spherePhantom is not implemented yet (Phase 4)");
+export function spherePhantom(grid: GridGeometry, radiusMm: number): Mask3D {
+  const center = gridCenter(grid);
+  const planeCount = grid.planes.length;
+  const sliceSize = grid.columns * grid.rows;
+  const data = new Uint8Array(sliceSize * planeCount);
+
+  for (let k = 0; k < planeCount; k++) {
+    for (let row = 0; row < grid.rows; row++) {
+      for (let column = 0; column < grid.columns; column++) {
+        const delta = sub(grid.indexToPatient(column, row, k), center);
+        if (length(delta) <= radiusMm) data[k * sliceSize + row * grid.columns + column] = 1;
+      }
+    }
+  }
+
+  return maskFromDense(grid, data);
 }
 
-/** Encoded three ways (keyhole, XOR, nested) in the contour phase; this is the voxelized ground truth. */
-export function torusPhantom(_grid: GridGeometry, _majorRadiusMm: number, _minorRadiusMm: number): Mask3D {
-  throw new NotImplementedError("torusPhantom is not implemented yet (Phase 4)");
+/** Axis-aligned with the grid normal: every axial slice near the tube shows the hole. */
+export function torusPhantom(grid: GridGeometry, majorRadiusMm: number, minorRadiusMm: number): Mask3D {
+  const center = gridCenter(grid);
+  const normal = grid.normal();
+  const planeCount = grid.planes.length;
+  const sliceSize = grid.columns * grid.rows;
+  const data = new Uint8Array(sliceSize * planeCount);
+
+  for (let k = 0; k < planeCount; k++) {
+    for (let row = 0; row < grid.rows; row++) {
+      for (let column = 0; column < grid.columns; column++) {
+        const delta = sub(grid.indexToPatient(column, row, k), center);
+        const z = dot(delta, normal);
+        const inPlaneX = dot(delta, grid.rowDirection);
+        const inPlaneY = dot(delta, grid.columnDirection);
+        const rho = Math.sqrt(inPlaneX * inPlaneX + inPlaneY * inPlaneY);
+        const tubeDistance = rho - majorRadiusMm;
+        if (tubeDistance * tubeDistance + z * z <= minorRadiusMm * minorRadiusMm) {
+          data[k * sliceSize + row * grid.columns + column] = 1;
+        }
+      }
+    }
+  }
+
+  return maskFromDense(grid, data);
 }
 
 /** Closed-form volumes, checkable independent of any voxelization. */
