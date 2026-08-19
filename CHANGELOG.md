@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.1] - 2026-08-19
+
+Docs-only patch. No code or behavior changes.
+
+### Fixed
+- `README.md`'s top-of-file Status line still said "v0.1, 57 tests green" —
+  stale since before the 0.2.0 correctness pass started, missed while
+  updating every other part of the README this round. Now says v0.2.1 and
+  the current test count. Caught after 0.2.0 had already been published,
+  since `README.md` ships inside the npm tarball and there is no way to
+  update a package's displayed README without publishing a new version.
+
 ## [0.2.0] - 2026-08-19
 
 Correctness and documentation pass, per the project's 0.1 → 0.2 goal: fix

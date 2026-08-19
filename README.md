@@ -13,7 +13,7 @@ in [`tests/unit/holes.test.ts`](tests/unit/holes.test.ts). Round-trip volume
 fidelity is verified separately, against a torus phantom's closed-form volume.
 
 **Status:** published — [`rtstruct-js`](https://www.npmjs.com/package/rtstruct-js)
-on npm, v0.1, 57 tests green.
+on npm, v0.2, 120 tests green.
 
 **Standard pinned:** DICOM PS3.3 **2026c**.
 

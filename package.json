@@ -1,6 +1,6 @@
 {
   "name": "rtstruct-js",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "type": "module",
   "description": "DICOM RT Structure Set reading and writing, validated against analytic phantoms.",
   "keywords": [
