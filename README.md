@@ -108,8 +108,9 @@ const bytes = await RTStruct.createFromMask({ mask, name: "Sphere" });
 // over the wire, whatever you'd do with any other DICOM object.
 
 const rt = await RTStruct.load({ rtstruct: bytes, geometry: grid });
-rt.getROINames();          // ["Sphere"]
-rt.getMask("Sphere");      // Mask3D, rasterized back onto `grid`
+rt.getROINames();          // ["Sphere"] — may contain duplicates, ROIName is a label, not an ID
+rt.getROINumbers();        // [1] — one entry per ROI, always unique
+rt.getMask("Sphere");      // Mask3D, rasterized back onto `grid` — or rt.getMask(1) by ROINumber
 rt.roi("Sphere");          // { name, roiNumber, interpretedType, provenance, diagnostics }
 rt.diagnostics;            // every diagnostic across the whole document
 rt.dicomVolume("Sphere");  // undefined unless the file itself declared ROI Volume (3006,002C) — never computed
@@ -117,6 +118,11 @@ rt.dicomVolume("Sphere");  // undefined unless the file itself declared ROI Volu
 
 `geometry` is the grid to rasterize the file's contours onto — normally the geometry of
 the image series the RTSTRUCT references.
+
+ROI identity is `ROINumber`, not `ROIName` — DICOM permits multiple ROIs with the same
+name. `roi()`/`getMask()`/`getMaskSlice()`/`dicomVolume()` accept either: a `ROINumber` is
+always unambiguous, but a name throws `AmbiguousRoiNameError` if more than one ROI shares
+it. Use `rt.findROIsByName("Sphere")` to get every match instead of picking one.
 
 ### Build a grid from real CT/MR slice files
 
@@ -169,13 +175,46 @@ console.log(rt.roi("Sphere").provenance.redact());
 
 ### Errors
 
-`ResourceLimitError` (oversized grid, checked before allocation), `NonParallelPlanesError`
-(v0.1 requires mutually parallel planes), `XorHomogeneityError` (`CLOSEDPLANAR_XOR`
-mixed with other geometric types in one ROI), `InconsistentSeriesError`
-(`readSeriesGeometry`'s instances disagree on rows/columns/pixel spacing/orientation),
-and `FrameOfReferenceMismatchError` (an ROI's declared Frame of Reference doesn't match
-the geometry passed to `RTStruct.load`, only under `strictness: "strict"` — see below)
-are all thrown synchronously — no silent fallback.
+All are thrown synchronously — no silent fallback.
+
+Geometry construction (`createGridGeometry` / `createUniformGrid`): `RangeError` for
+non-finite or non-positive `rows`/`columns`/`pixelSpacing`/`planeCount`/`sliceSpacingMm`,
+or an empty `planePositions` array. `NonOrthogonalBasisError` if `rowDirection` and
+`columnDirection` aren't orthogonal (within tolerance) — `patientToPixel()`'s inverse of
+`indexToPatient()` only holds when they are. `NonParallelPlanesError` — v0.1 requires
+mutually parallel planes.
+
+Mask/phantom allocation: `ResourceLimitError` (oversized grid or mask, checked *before*
+allocation) — the same check guards `Mask3D`, `vectorize()`, and `cubePhantom`/
+`spherePhantom`/`torusPhantom`. `RangeError` for out-of-range `Mask3D.get()`/
+`getSliceBuffer()` indices, or non-positive/non-finite phantom dimensions (e.g.
+`spherePhantom(grid, -10)`); `torusPhantom` additionally requires `majorRadiusMm >
+minorRadiusMm`. `IndeterminateVolumeError` — a single-plane grid has no derivable slice
+thickness, so `mask.volume()` throws rather than returning 0.
+
+Contours: `MalformedContourError` — a contour with fewer points than its geometric type
+can represent, or `ContourData` whose length isn't a multiple of 3 (never silently
+truncated). `XorHomogeneityError` (`CLOSEDPLANAR_XOR` mixed with other geometric types in
+one ROI). `UnclosedContourError` — an internal `vectorize()` invariant failure (a boundary
+trace that never closes), not something malformed input can trigger.
+
+Series/frame of reference: `InconsistentSeriesError` (`readSeriesGeometry`'s instances
+disagree on rows/columns/pixel spacing/orientation). `FrameOfReferenceMismatchError` — an
+ROI's declared Frame of Reference doesn't match the geometry passed to `RTStruct.load`
+under `strictness: "strict"` (see below), or `centroidDisplacementMm()` comparing masks
+in different frames.
+
+ROI identity: `AmbiguousRoiNameError` — `rt.roi(name)` / `rt.getMask(name)` throw if more
+than one ROI shares that name (DICOM permits duplicate `ROIName` across distinct
+`ROINumber`s); pass the `ROINumber` instead, or use `rt.findROIsByName(name)` to get every
+match.
+
+Metrics: `GridMismatchError` — `dice()`/`voxelDisagreement()` require both masks on an
+equivalent `GridGeometry` (matching dimensions, spacing, orientation, plane positions, and
+frame of reference); same array dimensions is not sufficient, since two grids can have
+identical `rows`/`columns`/plane count and still represent different physical spacing.
+`IndeterminateCentroidError` — an empty mask has no centroid; `centroidDisplacementMm()`
+never fabricates `[0,0,0]`.
 
 `LoadOptions.strictness` (`"warn"` by default, or `"strict"` / `"silent"`) controls what
 happens when an ROI's `ReferencedFrameOfReferenceUID` disagrees with `geometry`'s own

@@ -1,3 +1,5 @@
+import { ResourceLimitError, UnclosedContourError } from "../errors.js";
+import { DEFAULT_MAX_VOXELS } from "../mask/mask3d.js";
 import type { Mask3D } from "../types.js";
 import type { Contour } from "./types.js";
 
@@ -38,7 +40,52 @@ function boundaryEdges(buffer: Uint8Array, rows: number, columns: number): HalfE
   return edges;
 }
 
-/** Stitches boundary edges (matching endpoint-to-startpoint) into closed loops. */
+/**
+ * Two filled voxels touching only diagonally (e.g. `[[1,0],[0,1]]`) share exactly one
+ * corner, and at that corner two boundary edges start: one continuing around the current
+ * voxel's own square, one jumping to the diagonal neighbor's square. Picking "whichever
+ * comes first in `candidates`" is an array-order accident, not a topology rule — it can
+ * silently flip between joining the two voxels into one self-touching polygon and keeping
+ * them as two separate contours depending on nothing but iteration order.
+ *
+ * The fix: always take the sharpest CLOCKWISE turn available relative to the incoming
+ * edge (screen coordinates, x right / y down). This is the standard resolution for the
+ * 4-connectivity vs 8-connectivity ambiguity in boundary tracing — it guarantees the
+ * tracer keeps following the boundary of the square it's already on and never crosses a
+ * diagonal gap into a different component, deterministically. RTStructJS's foreground is
+ * therefore 4-connected (diagonal-only touches are two separate contours); background is
+ * correspondingly 8-connected, the standard consistent pairing.
+ */
+function turnRank(inDx: number, inDy: number, outDx: number, outDy: number): number {
+  if (outDx === inDx && outDy === inDy) return 0; // straight ahead
+  if (outDx === -inDy && outDy === inDx) return 1; // 90° clockwise
+  if (outDx === -inDx && outDy === -inDy) return 2; // 180° back
+  return 3; // 90° counter-clockwise
+}
+
+function pickNextEdge(incoming: HalfEdge, candidates: readonly HalfEdge[]): HalfEdge | undefined {
+  if (candidates.length === 0) return undefined;
+  if (candidates.length === 1) return candidates[0];
+  const inDx = incoming.x1 - incoming.x0;
+  const inDy = incoming.y1 - incoming.y0;
+  return [...candidates].sort(
+    (a, b) =>
+      turnRank(inDx, inDy, a.x1 - a.x0, a.y1 - a.y0) - turnRank(inDx, inDy, b.x1 - b.x0, b.y1 - b.y0),
+  )[0];
+}
+
+/**
+ * Stitches boundary edges (matching endpoint-to-startpoint) into closed loops. For a
+ * proper binary raster, every exposed voxel boundary forms a closed cycle — an edge chain
+ * that fails to return to its own start is an algorithm bug or a corrupted buffer, not
+ * unusual-but-valid data, so it throws rather than silently emitting an open path
+ * mislabeled as CLOSED_PLANAR. Not independently unit-testable: boundaryEdges() can never
+ * produce a set of edges that doesn't close for any real mask buffer (a rectangular binary
+ * raster's exposed boundaries are always closed cycles by construction), and this stays
+ * unexported to avoid leaking an internal detail into the public API — same reasoning
+ * applied to the `at()`-style defensive checks elsewhere in this codebase, which also
+ * aren't unit-tested in isolation for the same reason.
+ */
 function linkLoops(edges: readonly HalfEdge[]): Point2D[][] {
   const key = (x: number, y: number): string => `${x},${y}`;
   const byStart = new Map<string, HalfEdge[]>();
@@ -55,22 +102,46 @@ function linkLoops(edges: readonly HalfEdge[]): Point2D[][] {
     if (used.has(start)) continue;
     const loop: Point2D[] = [{ x: start.x0, y: start.y0 }];
     let current: HalfEdge = start;
+    let closed = false;
     for (;;) {
       used.add(current);
       loop.push({ x: current.x1, y: current.y1 });
-      if (current.x1 === start.x0 && current.y1 === start.y0) break;
-      const candidates: HalfEdge[] = byStart.get(key(current.x1, current.y1)) ?? [];
-      const next: HalfEdge | undefined = candidates.find((e: HalfEdge) => !used.has(e));
+      if (current.x1 === start.x0 && current.y1 === start.y0) {
+        closed = true;
+        break;
+      }
+      const candidates = (byStart.get(key(current.x1, current.y1)) ?? []).filter((e) => !used.has(e));
+      const next = pickNextEdge(current, candidates);
       if (!next) break;
       current = next;
+    }
+    if (!closed) {
+      throw new UnclosedContourError(
+        `boundary trace starting at [${start.x0}, ${start.y0}] did not return to its start ` +
+          `after ${loop.length} points — this should never happen for a valid mask buffer`,
+      );
     }
     if (loop.length > 3) loops.push(loop.slice(0, -1));
   }
   return loops;
 }
 
-/** mask -> contours. Never the inverse gate — see IMPLEMENTATION_PLAN.md Phase 4. */
-export function vectorize(mask: Mask3D): readonly Contour[] {
+/**
+ * mask -> contours. Never the inverse gate — see IMPLEMENTATION_PLAN.md Phase 4.
+ *
+ * Bounds voxel count BEFORE building any boundary/loop data structure — see SEC-01. This
+ * matters here specifically because a mask built via maskFromDense (rather than
+ * createEmptyMask) never passed through that function's own maxVoxels check, and a
+ * worst-case checkerboard mask produces roughly 4 boundary edges per filled voxel, so the
+ * intermediate HalfEdge/Map/Set overhead can exceed the raw buffer size by several times.
+ */
+export function vectorize(mask: Mask3D, maxVoxels: number = DEFAULT_MAX_VOXELS): readonly Contour[] {
+  const [columns, rows, planeCount] = mask.dimensions;
+  const voxelCount = columns * rows * planeCount;
+  if (voxelCount > maxVoxels) {
+    throw new ResourceLimitError(`mask of ${voxelCount} voxels exceeds the limit of ${maxVoxels}`);
+  }
+
   const grid = mask.geometry;
   const contours: Contour[] = [];
   for (let planeIndex = 0; planeIndex < grid.planes.length; planeIndex++) {

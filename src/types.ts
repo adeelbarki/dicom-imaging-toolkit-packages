@@ -18,12 +18,26 @@ export interface GridGeometry {
   readonly frameOfReferenceUID?: string;
 
   normal(): Vec3;
-  /** THE authority for operation safety. Tolerance-based, NOT transitive. */
+  /**
+   * THE authority for operation safety. Tolerance-based, NOT transitive. If both grids
+   * declare a `frameOfReferenceUID` and they differ, always `false` regardless of
+   * tolerance — physically non-comparable coordinate systems. Either side undefined is
+   * not treated as a mismatch (falls through to the geometric comparison).
+   */
   equals(other: GridGeometry, tol?: GridTolerance): boolean;
-  /** Cache/lookup hint ONLY. A hit must still be confirmed with equals(). */
+  /**
+   * Cache/lookup hint ONLY. A pure hash of raw values (~0.001 precision), not aligned with
+   * equals()'s tolerances (which are looser, per-field, and caller-overridable). A MATCH
+   * must still be confirmed with equals(); a MISMATCH is not proof of inequality.
+   */
   fingerprint(): string;
   isUniformlySpaced(tolMm?: number): boolean;
   indexToPatient(column: number, row: number, planeIndex: number): Vec3;
+  /**
+   * Orthogonally projects a patient-space point onto the given plane and returns
+   * continuous pixel coordinates — this does not check whether the point actually lies on
+   * (or near) that plane. A point arbitrarily far out of plane still returns a result.
+   */
   patientToPixel(p: Vec3, planeIndex: number): { column: number; row: number };
   findNearestPlane(p: Vec3): { planeIndex: number; distanceMm: number };
 }
@@ -74,7 +88,8 @@ export type DiagnosticCode =
   | "MISSING_CONTOUR_IMAGE_SEQUENCE"
   | "EMPTY_ROI"
   | "SLICE_ORDER_REVERSED"
-  | "FRAME_OF_REFERENCE_MISMATCH";
+  | "FRAME_OF_REFERENCE_MISMATCH"
+  | "UNSUPPORTED_CONTOUR_GEOMETRY";
 
 /** Problems and ambiguities. Distinct from Provenance. */
 export interface Diagnostic {

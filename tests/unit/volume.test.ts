@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { cubePhantom, analyticVolumeMm3 } from "../../src/phantom/index.js";
 import { createUniformGrid } from "../../src/geometry/grid-geometry.js";
+import { IndeterminateVolumeError } from "../../src/errors.js";
 
 describe("VOL: voxel volume against analytic ground truth", () => {
   it("VOL-01 10mm cube on 1mm isotropic voxels is 1000 mm3", () => {
@@ -23,5 +24,10 @@ describe("VOL: voxel volume against analytic ground truth", () => {
   it("VOL-04 contour method is out of scope for v0.1 and must not silently fall back", () => {
     const g = createUniformGrid({ rows: 8, columns: 8, planeCount: 8, pixelSpacing: [1, 1], sliceSpacingMm: 1 });
     expect(() => cubePhantom(g, 4).volume({ method: "contour" })).toThrowError(/NotImplemented|contour/i);
+  });
+
+  it("a single-plane grid's voxel volume is not computable, not silently zero", () => {
+    const g = createUniformGrid({ rows: 8, columns: 8, planeCount: 1, pixelSpacing: [1, 1], sliceSpacingMm: 1 });
+    expect(() => cubePhantom(g, 4).volume()).toThrow(IndeterminateVolumeError);
   });
 });

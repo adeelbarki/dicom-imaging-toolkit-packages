@@ -1,6 +1,12 @@
 import { add, dot, length, scale, sub } from "../geometry/vec3.js";
-import { maskFromDense } from "../mask/mask3d.js";
+import { checkVoxelBudget, DEFAULT_MAX_VOXELS, maskFromDense } from "../mask/mask3d.js";
 import type { GridGeometry, Mask3D, Vec3 } from "../types.js";
+
+function validatePositive(name: string, value: number): void {
+  if (!Number.isFinite(value) || value <= 0) {
+    throw new RangeError(`${name} must be finite and > 0, got ${value}`);
+  }
+}
 
 function at<T>(arr: readonly T[], index: number): T {
   const value = arr[index];
@@ -20,7 +26,9 @@ function gridCenter(grid: GridGeometry): Vec3 {
   return add(p0, scale(normal, zCenter - dot(p0, normal)));
 }
 
-export function cubePhantom(grid: GridGeometry, sideMm: number): Mask3D {
+export function cubePhantom(grid: GridGeometry, sideMm: number, maxVoxels: number = DEFAULT_MAX_VOXELS): Mask3D {
+  validatePositive("sideMm", sideMm);
+  checkVoxelBudget(grid, maxVoxels);
   const half = sideMm / 2;
   const normal = grid.normal();
   const center = gridCenter(grid);
@@ -44,7 +52,9 @@ export function cubePhantom(grid: GridGeometry, sideMm: number): Mask3D {
   return maskFromDense(grid, data);
 }
 
-export function spherePhantom(grid: GridGeometry, radiusMm: number): Mask3D {
+export function spherePhantom(grid: GridGeometry, radiusMm: number, maxVoxels: number = DEFAULT_MAX_VOXELS): Mask3D {
+  validatePositive("radiusMm", radiusMm);
+  checkVoxelBudget(grid, maxVoxels);
   const center = gridCenter(grid);
   const planeCount = grid.planes.length;
   const sliceSize = grid.columns * grid.rows;
@@ -63,7 +73,22 @@ export function spherePhantom(grid: GridGeometry, radiusMm: number): Mask3D {
 }
 
 /** Axis-aligned with the grid normal: every axial slice near the tube shows the hole. */
-export function torusPhantom(grid: GridGeometry, majorRadiusMm: number, minorRadiusMm: number): Mask3D {
+export function torusPhantom(
+  grid: GridGeometry,
+  majorRadiusMm: number,
+  minorRadiusMm: number,
+  maxVoxels: number = DEFAULT_MAX_VOXELS,
+): Mask3D {
+  validatePositive("majorRadiusMm", majorRadiusMm);
+  validatePositive("minorRadiusMm", minorRadiusMm);
+  if (majorRadiusMm <= minorRadiusMm) {
+    throw new RangeError(
+      `majorRadiusMm (${majorRadiusMm}) must be greater than minorRadiusMm (${minorRadiusMm}) — ` +
+        `otherwise the tube self-intersects and analyticVolumeMm3.torus's formula no longer ` +
+        `matches the enclosed volume`,
+    );
+  }
+  checkVoxelBudget(grid, maxVoxels);
   const center = gridCenter(grid);
   const normal = grid.normal();
   const planeCount = grid.planes.length;

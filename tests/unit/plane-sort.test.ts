@@ -37,4 +37,12 @@ describe("GEO: plane ordering", () => {
     const bad: GridPlane[] = [p(0), { position: [0, 0, NaN] }, p(3)];
     expect(() => sortPlanes(bad, NORMAL)).toThrow(/non-finite/i);
   });
+
+  it("planes 0.4mm apart are distinct slices, not duplicates — dedup must not reuse tolerance.positionMm", () => {
+    // A real, normal thin-slice spacing. With the default positionMm (0.5mm) wrongly
+    // reused for dedup, 10.0 and 10.4 would satisfy `0.4 <= 0.5` and one would be dropped.
+    const r = sortPlanes([p(10.0), p(10.4)], NORMAL);
+    expect(r.planes).toHaveLength(2);
+    expect(r.diagnostics.map((d) => d.code)).not.toContain("DUPLICATE_PLANE_POSITION");
+  });
 });

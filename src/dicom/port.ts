@@ -1,5 +1,6 @@
 import { createRequire } from "node:module";
 import type { Contour, ContourGeometricType } from "../contour/types.js";
+import { MalformedContourError } from "../errors.js";
 import type { Vec3 } from "../types.js";
 
 // THE ONLY dcmjs importer — see IMPLEMENTATION_PLAN.md section 3.
@@ -45,9 +46,19 @@ function asArray<T>(value: readonly T[] | undefined): readonly T[] {
   return value ?? [];
 }
 
-function chunkPoints(flat: readonly number[]): Vec3[] {
+/** Exported for direct testing only — port.ts is not re-exported through index.ts, so this
+ *  never reaches the public API. No fixture built through writeRTStruct can ever produce a
+ *  malformed length (every Contour's points always flatten to a multiple of 3), so the only
+ *  way to exercise this is to call it directly with a hand-corrupted array. */
+export function chunkPoints(flat: readonly number[]): Vec3[] {
+  if (flat.length % 3 !== 0) {
+    throw new MalformedContourError(
+      `ContourData has ${flat.length} values, which is not a multiple of 3 — cannot be ` +
+        `chunked into (x,y,z) points without silently dropping the trailing ${flat.length % 3} value(s)`,
+    );
+  }
   const points: Vec3[] = [];
-  for (let i = 0; i + 2 < flat.length; i += 3) {
+  for (let i = 0; i < flat.length; i += 3) {
     points.push([at(flat, i), at(flat, i + 1), at(flat, i + 2)]);
   }
   return points;

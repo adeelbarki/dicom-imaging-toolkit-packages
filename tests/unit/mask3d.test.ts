@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { createEmptyMask } from "../../src/mask/mask3d.js";
+import { createEmptyMask, maskFromDense } from "../../src/mask/mask3d.js";
+import { ResourceLimitError } from "../../src/errors.js";
 import { cubePhantom } from "../../src/phantom/index.js";
 import { createUniformGrid } from "../../src/geometry/grid-geometry.js";
 
@@ -27,5 +28,36 @@ describe("MSK: access paths", () => {
 
   it("MSK-04 dimensions are [columns, rows, planes]", () => {
     expect(createEmptyMask(g()).dimensions).toEqual([16, 16, 8]);
+  });
+});
+
+describe("MSK: out-of-range access throws instead of returning a plausible-but-wrong result", () => {
+  it("get() rejects an out-of-bounds column/row/planeIndex", () => {
+    const m = createEmptyMask(g());
+    expect(() => m.get(16, 0, 0)).toThrow(RangeError);
+    expect(() => m.get(0, 16, 0)).toThrow(RangeError);
+    expect(() => m.get(0, 0, 8)).toThrow(RangeError);
+    expect(() => m.get(-1, 0, 0)).toThrow(RangeError);
+  });
+
+  it("get() rejects a non-integer index", () => {
+    const m = createEmptyMask(g());
+    expect(() => m.get(1.5, 0, 0)).toThrow(RangeError);
+  });
+
+  it("getSliceBuffer() rejects an out-of-range planeIndex instead of clamping to an empty or wrapped-around slice", () => {
+    const m = createEmptyMask(g());
+    expect(() => m.getSliceBuffer(1000)).toThrow(/plane index 1000 out of range \[0, 7\]/);
+    // subarray() treats a negative index as counting from the end — must not silently
+    // succeed with data from the wrong plane.
+    expect(() => m.getSliceBuffer(-1)).toThrow(RangeError);
+  });
+});
+
+describe("MSK: voxel count overflow is rejected before allocation", () => {
+  it("dimensions whose product exceeds Number.MAX_SAFE_INTEGER throw ResourceLimitError", () => {
+    const huge = createUniformGrid({ rows: 100_000_000, columns: 100_000_000, planeCount: 2, pixelSpacing: [1, 1], sliceSpacingMm: 1 });
+    expect(() => createEmptyMask(huge, Number.MAX_SAFE_INTEGER)).toThrow(ResourceLimitError);
+    expect(() => maskFromDense(huge, new Uint8Array(0))).toThrow(ResourceLimitError);
   });
 });

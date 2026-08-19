@@ -2,7 +2,7 @@ import { rasterize } from "./contour/rasterize.js";
 import { vectorize } from "./contour/vectorize.js";
 import { createDiagnostic } from "./diagnostics/index.js";
 import { readRTStruct, writeRTStruct } from "./dicom/port.js";
-import { FrameOfReferenceMismatchError } from "./errors.js";
+import { AmbiguousRoiNameError, FrameOfReferenceMismatchError } from "./errors.js";
 import type { Diagnostic, DicomVolumeResult, GridGeometry, LoadOptions, Mask3D, Provenance, RoiHandle } from "./types.js";
 
 // Public building blocks — everything needed to construct a GridGeometry or Mask3D
@@ -47,10 +47,13 @@ interface StoredRoi {
 
 /** The public entry point (IMPLEMENTATION_PLAN.md section 1). Wired to dicom/port.ts. */
 export class RTStruct {
-  private readonly rois: ReadonlyMap<string, StoredRoi>;
+  /** Keyed by ROINumber, not name — ROIName is a label (PS3.3 permits duplicates across
+   *  ROIs), ROINumber is the actual Type 1 unique identifier. Keying by name would silently
+   *  drop every ROI but the last one sharing a name. */
+  private readonly rois: ReadonlyMap<number, StoredRoi>;
   private readonly documentDiagnostics: readonly Diagnostic[];
 
-  private constructor(rois: ReadonlyMap<string, StoredRoi>, documentDiagnostics: readonly Diagnostic[]) {
+  private constructor(rois: ReadonlyMap<number, StoredRoi>, documentDiagnostics: readonly Diagnostic[]) {
     this.rois = rois;
     this.documentDiagnostics = documentDiagnostics;
   }
@@ -70,7 +73,7 @@ export class RTStruct {
     }
 
     const strictness = params.strictness ?? "warn";
-    const rois = new Map<string, StoredRoi>();
+    const rois = new Map<number, StoredRoi>();
     for (const roi of parsed.rois) {
       const result = rasterize(roi.contours, params.geometry);
       const diagnostics = [...result.diagnostics];
@@ -96,7 +99,7 @@ export class RTStruct {
           createDiagnostic("FRAME_OF_REFERENCE_MISMATCH", "warning", message, { roiNumber: roi.roiNumber }),
         );
       }
-      rois.set(roi.name, {
+      rois.set(roi.roiNumber, {
         name: roi.name,
         roiNumber: roi.roiNumber,
         interpretedType: roi.interpretedType,
@@ -114,22 +117,28 @@ export class RTStruct {
     return writeRTStruct({ rois: [{ name: params.name, contours: vectorize(params.mask) }] });
   }
 
-  private getRoi(name: string): StoredRoi {
-    const roi = this.rois.get(name);
-    if (!roi) throw new RangeError(`no ROI named ${JSON.stringify(name)}`);
-    return roi;
+  /** Resolves either identifier: a number looks up ROINumber directly (unambiguous by
+   *  construction — DICOM requires it unique). A string looks up by name, and throws
+   *  AmbiguousRoiNameError if more than one ROI shares that name rather than silently
+   *  picking one — use the ROINumber or findROIsByName() to disambiguate. */
+  private getRoi(identifier: string | number): StoredRoi {
+    if (typeof identifier === "number") {
+      const roi = this.rois.get(identifier);
+      if (!roi) throw new RangeError(`no ROI with ROINumber ${identifier}`);
+      return roi;
+    }
+    const matches = [...this.rois.values()].filter((r) => r.name === identifier);
+    if (matches.length === 0) throw new RangeError(`no ROI named ${JSON.stringify(identifier)}`);
+    if (matches.length > 1) {
+      throw new AmbiguousRoiNameError(
+        `${matches.length} ROIs are named ${JSON.stringify(identifier)} (ROINumbers ` +
+          `${matches.map((r) => r.roiNumber).join(", ")}) — use the ROINumber or findROIsByName() instead`,
+      );
+    }
+    return matches[0] as StoredRoi;
   }
 
-  get diagnostics(): readonly Diagnostic[] {
-    return [...this.documentDiagnostics, ...[...this.rois.values()].flatMap((roi) => roi.diagnostics)];
-  }
-
-  getROINames(): readonly string[] {
-    return [...this.rois.keys()];
-  }
-
-  roi(name: string): RoiHandle {
-    const roi = this.getRoi(name);
+  private toHandle(roi: StoredRoi): RoiHandle {
     return {
       name: roi.name,
       roiNumber: roi.roiNumber,
@@ -139,17 +148,43 @@ export class RTStruct {
     };
   }
 
-  getMask(name: string): Mask3D {
-    return this.getRoi(name).mask;
+  get diagnostics(): readonly Diagnostic[] {
+    return [...this.documentDiagnostics, ...[...this.rois.values()].flatMap((roi) => roi.diagnostics)];
   }
 
-  getMaskSlice(name: string, planeIndex: number): Uint8Array {
-    return this.getRoi(name).mask.getSliceBuffer(planeIndex);
+  /** May contain duplicates — ROIName is a label, not an identifier. Use getROINumbers()
+   *  for a listing guaranteed to have one entry per ROI. */
+  getROINames(): readonly string[] {
+    return [...this.rois.values()].map((r) => r.name);
+  }
+
+  getROINumbers(): readonly number[] {
+    return [...this.rois.keys()];
+  }
+
+  /** All ROIs with the given name — DICOM permits duplicate ROIName across distinct
+   *  ROINumbers, so this can legitimately return more than one handle. */
+  findROIsByName(name: string): readonly RoiHandle[] {
+    return [...this.rois.values()].filter((r) => r.name === name).map((r) => this.toHandle(r));
+  }
+
+  /** Accepts either the ROINumber (unambiguous) or the ROIName (throws AmbiguousRoiNameError
+   *  if more than one ROI shares it). */
+  roi(identifier: string | number): RoiHandle {
+    return this.toHandle(this.getRoi(identifier));
+  }
+
+  getMask(identifier: string | number): Mask3D {
+    return this.getRoi(identifier).mask;
+  }
+
+  getMaskSlice(identifier: string | number, planeIndex: number): Uint8Array {
+    return this.getRoi(identifier).mask.getSliceBuffer(planeIndex);
   }
 
   /** Never computed from the mask — absent unless the file itself declared ROI Volume (3006,002C). */
-  dicomVolume(name: string): DicomVolumeResult | undefined {
-    const volumeCm3 = this.getRoi(name).volumeCm3;
+  dicomVolume(identifier: string | number): DicomVolumeResult | undefined {
+    const volumeCm3 = this.getRoi(identifier).volumeCm3;
     return volumeCm3 === undefined ? undefined : { value: volumeCm3, unit: "cm3", source: "DICOM ROI Volume (3006,002C)" };
   }
 }

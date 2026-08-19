@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { RTStruct, RTStructImpl } from "../../src/index.js";
-import { FrameOfReferenceMismatchError } from "../../src/errors.js";
+import { AmbiguousRoiNameError, FrameOfReferenceMismatchError } from "../../src/errors.js";
 import { createUniformGrid } from "../../src/geometry/grid-geometry.js";
 import { cubePhantom } from "../../src/phantom/index.js";
 
@@ -37,6 +37,52 @@ describe("IO: tolerant reading", () => {
   it("IO-05 absent ROI Volume returns undefined rather than a computed substitute", async () => {
     const rt = await RTStruct.load({ rtstruct: buildFixture({ rois: [{ name: "A" }] }), geometry: g() });
     expect(rt.dicomVolume("A")).toBeUndefined();
+  });
+});
+
+describe("IO: ROI identity is ROINumber, not ROIName — duplicate names must not silently overwrite", () => {
+  it("IO-15 two ROIs with the same name both load, keyed by distinct ROINumbers", async () => {
+    const rt = await RTStruct.load({
+      rtstruct: buildFixture({ rois: [{ name: "GTV" }, { name: "GTV" }] }),
+      geometry: g(),
+    });
+    expect(rt.getROINumbers()).toEqual([1, 2]);
+    expect(rt.getROINames()).toEqual(["GTV", "GTV"]);
+  });
+
+  it("IO-16 roi(number) unambiguously resolves either duplicate", async () => {
+    const rt = await RTStruct.load({
+      rtstruct: buildFixture({ rois: [{ name: "GTV" }, { name: "GTV" }] }),
+      geometry: g(),
+    });
+    expect(rt.roi(1).roiNumber).toBe(1);
+    expect(rt.roi(2).roiNumber).toBe(2);
+  });
+
+  it("IO-17 roi(name) throws AmbiguousRoiNameError when more than one ROI shares the name", async () => {
+    const rt = await RTStruct.load({
+      rtstruct: buildFixture({ rois: [{ name: "GTV" }, { name: "GTV" }] }),
+      geometry: g(),
+    });
+    expect(() => rt.roi("GTV")).toThrow(AmbiguousRoiNameError);
+    expect(() => rt.getMask("GTV")).toThrow(AmbiguousRoiNameError);
+  });
+
+  it("IO-18 findROIsByName returns every match instead of forcing disambiguation", async () => {
+    const rt = await RTStruct.load({
+      rtstruct: buildFixture({ rois: [{ name: "GTV" }, { name: "GTV" }, { name: "PTV" }] }),
+      geometry: g(),
+    });
+    const matches = rt.findROIsByName("GTV");
+    expect(matches).toHaveLength(2);
+    expect(matches.map((r) => r.roiNumber).sort()).toEqual([1, 2]);
+    expect(rt.findROIsByName("nonexistent")).toEqual([]);
+  });
+
+  it("IO-19 a unique name still resolves directly by string, unaffected", async () => {
+    const rt = await RTStruct.load({ rtstruct: buildFixture({ rois: [{ name: "A" }] }), geometry: g() });
+    expect(rt.roi("A").name).toBe("A");
+    expect(rt.getMask("A").count()).toBeGreaterThanOrEqual(0);
   });
 });
 

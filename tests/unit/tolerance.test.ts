@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { createGridGeometry } from "../../src/geometry/grid-geometry.js";
+import { createGridGeometry, createUniformGrid } from "../../src/geometry/grid-geometry.js";
 import { DEFAULT_TOLERANCE } from "../../src/geometry/tolerance.js";
+import { NonOrthogonalBasisError } from "../../src/errors.js";
 import { axialGrid } from "../helpers.js";
 import type { GridTolerance, Vec3 } from "../../src/types.js";
 
@@ -64,6 +65,99 @@ describe("GEO: frame of reference is part of equality, not just the fingerprint"
     const withoutFor = axialGrid([0, 3, 6]);
     expect(withoutFor.equals(withFor)).toBe(true);
     expect(withFor.equals(withoutFor)).toBe(true);
+  });
+});
+
+describe("GEO: row/column direction basis must be orthogonal", () => {
+  it("a non-orthogonal basis is rejected at construction, not silently accepted", () => {
+    // row=[1,0,0], column=[0.5,1,0] — ~63.4 degrees apart, not 90. Traced through
+    // patientToPixel(indexToPatient(1, 0, 0)) before this fix: returns row ≈ 0.4472
+    // instead of 0, because the inverse formula only holds when row ⟂ column.
+    expect(() =>
+      createGridGeometry({
+        rows: 16,
+        columns: 16,
+        rowDirection: [1, 0, 0] as Vec3,
+        columnDirection: [0.5, 1, 0] as Vec3,
+        pixelSpacing: [1, 1],
+        planePositions: [[0, 0, 0] as Vec3],
+      }),
+    ).toThrow(NonOrthogonalBasisError);
+  });
+
+  it("an exactly orthogonal basis is accepted", () => {
+    expect(() => axialGrid([0])).not.toThrow();
+  });
+
+  it("a basis within the orthogonality tolerance (sub-degree noise) is accepted", () => {
+    // ~0.01 degrees off 90, well within the noise floor for DICOM DS round-tripping.
+    const nearlyOrthogonal: Vec3 = [Math.sin(1e-4), Math.cos(1e-4), 0];
+    expect(() =>
+      createGridGeometry({
+        rows: 16,
+        columns: 16,
+        rowDirection: [1, 0, 0] as Vec3,
+        columnDirection: nearlyOrthogonal,
+        pixelSpacing: [1, 1],
+        planePositions: [[0, 0, 0] as Vec3],
+      }),
+    ).not.toThrow();
+  });
+});
+
+describe("GEO: basic constructor parameters are validated, not trusted", () => {
+  const base = {
+    rows: 16,
+    columns: 16,
+    rowDirection: [1, 0, 0] as Vec3,
+    columnDirection: [0, 1, 0] as Vec3,
+    pixelSpacing: [1, 1] as [number, number],
+    planePositions: [[0, 0, 0] as Vec3],
+  };
+
+  it("non-positive rows/columns are rejected", () => {
+    expect(() => createGridGeometry({ ...base, rows: 0 })).toThrow(RangeError);
+    expect(() => createGridGeometry({ ...base, rows: -50 })).toThrow(RangeError);
+    expect(() => createGridGeometry({ ...base, columns: 0 })).toThrow(RangeError);
+  });
+
+  it("non-finite or non-positive pixelSpacing is rejected", () => {
+    expect(() => createGridGeometry({ ...base, pixelSpacing: [-1, 1] })).toThrow(RangeError);
+    expect(() => createGridGeometry({ ...base, pixelSpacing: [1, NaN] })).toThrow(RangeError);
+    expect(() => createGridGeometry({ ...base, pixelSpacing: [0, 1] })).toThrow(RangeError);
+  });
+
+  it("an empty planePositions array is rejected — a grid needs at least one plane", () => {
+    expect(() => createGridGeometry({ ...base, planePositions: [] })).toThrow(
+      /at least one plane/i,
+    );
+  });
+
+  it("createUniformGrid rejects a non-positive planeCount", () => {
+    expect(() =>
+      createUniformGrid({ rows: 16, columns: 16, planeCount: 0, pixelSpacing: [1, 1], sliceSpacingMm: 1 }),
+    ).toThrow(RangeError);
+    expect(() =>
+      createUniformGrid({ rows: 16, columns: 16, planeCount: -10, pixelSpacing: [1, 1], sliceSpacingMm: 1 }),
+    ).toThrow(RangeError);
+  });
+
+  it("createUniformGrid rejects a non-positive sliceSpacingMm", () => {
+    expect(() =>
+      createUniformGrid({ rows: 16, columns: 16, planeCount: 4, pixelSpacing: [1, 1], sliceSpacingMm: 0 }),
+    ).toThrow(RangeError);
+    expect(() =>
+      createUniformGrid({ rows: 16, columns: 16, planeCount: 4, pixelSpacing: [1, 1], sliceSpacingMm: -1 }),
+    ).toThrow(RangeError);
+  });
+});
+
+describe("GEO: sub-0.5mm plane spacing is preserved through construction, not deduplicated", () => {
+  it("five planes 0.4mm apart all survive createGridGeometry — none are dropped as duplicates", () => {
+    // Regression for the plane-sort dedup bug: it used to reuse tolerance.positionMm
+    // (0.5mm) for duplicate detection, which would have silently merged these.
+    const g = axialGrid([0, 0.4, 0.8, 1.2, 1.6]);
+    expect(g.planes).toHaveLength(5);
   });
 });
 
