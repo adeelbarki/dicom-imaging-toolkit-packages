@@ -23,6 +23,16 @@ function computeFingerprint(g: GridGeometry): string {
 }
 
 function gridEquals(self: GridGeometry, other: GridGeometry, tol: GridTolerance): boolean {
+  // Both frames known and different: physically non-comparable coordinate systems, no
+  // amount of geometric tolerance can paper over that. Either side unknown (the common
+  // case for createUniformGrid/phantoms) falls through — there's nothing to contradict.
+  if (
+    self.frameOfReferenceUID !== undefined &&
+    other.frameOfReferenceUID !== undefined &&
+    self.frameOfReferenceUID !== other.frameOfReferenceUID
+  ) {
+    return false;
+  }
   if (self.rows !== other.rows || self.columns !== other.columns) return false;
   if (self.planes.length !== other.planes.length) return false;
   if (Math.abs(self.pixelSpacing[0] - other.pixelSpacing[0]) > tol.spacingMm) return false;

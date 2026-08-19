@@ -28,3 +28,19 @@ export class XorHomogeneityError extends Error {
     this.name = "XorHomogeneityError";
   }
 }
+
+/** All instances in a series must share rows/columns/pixelSpacing/orientation — the grid model has one value each, not per-plane. */
+export class InconsistentSeriesError extends Error {
+  constructor(message: string) {
+    super(`InconsistentSeriesError: ${message}`);
+    this.name = "InconsistentSeriesError";
+  }
+}
+
+/** Thrown only under LoadOptions.strictness "strict" — see RTStruct.load. */
+export class FrameOfReferenceMismatchError extends Error {
+  constructor(message: string) {
+    super(`FrameOfReferenceMismatchError: ${message}`);
+    this.name = "FrameOfReferenceMismatchError";
+  }
+}

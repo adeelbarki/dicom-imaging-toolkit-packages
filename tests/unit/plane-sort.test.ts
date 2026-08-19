@@ -32,4 +32,9 @@ describe("GEO: plane ordering", () => {
     const skew: GridPlane[] = [p(0), { position: [0, 0, 3] }];
     expect(() => sortPlanes(skew, [0.7, 0, 0.7])).toThrowError(/NonParallel|parallel/i);
   });
+
+  it("a non-finite plane position throws instead of silently corrupting the sort", () => {
+    const bad: GridPlane[] = [p(0), { position: [0, 0, NaN] }, p(3)];
+    expect(() => sortPlanes(bad, NORMAL)).toThrow(/non-finite/i);
+  });
 });

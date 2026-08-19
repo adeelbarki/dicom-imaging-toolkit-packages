@@ -1,10 +1,28 @@
 {
   "name": "rtstruct-js",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "description": "DICOM RT Structure Set reading and writing, validated against analytic phantoms.",
+  "keywords": [
+    "dicom",
+    "rtstruct",
+    "rt-struct",
+    "radiotherapy",
+    "medical-imaging",
+    "contour",
+    "segmentation",
+    "dcmjs"
+  ],
   "license": "MIT",
   "author": "Adeel Khan",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/adeelbarki/rtstruct-js.git"
+  },
+  "homepage": "https://github.com/adeelbarki/rtstruct-js#readme",
+  "bugs": {
+    "url": "https://github.com/adeelbarki/rtstruct-js/issues"
+  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {

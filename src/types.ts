@@ -73,7 +73,8 @@ export type DiagnosticCode =
   | "MISSING_RT_ROI_OBSERVATIONS"
   | "MISSING_CONTOUR_IMAGE_SEQUENCE"
   | "EMPTY_ROI"
-  | "SLICE_ORDER_REVERSED";
+  | "SLICE_ORDER_REVERSED"
+  | "FRAME_OF_REFERENCE_MISMATCH";
 
 /** Problems and ambiguities. Distinct from Provenance. */
 export interface Diagnostic {

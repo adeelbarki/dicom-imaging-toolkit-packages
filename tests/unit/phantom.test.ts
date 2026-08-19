@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { RTStructImpl } from "../../src/index.js";
+import { RTStruct } from "../../src/index.js";
 import { createUniformGrid } from "../../src/geometry/grid-geometry.js";
 import { spherePhantom, torusPhantom, analyticVolumeMm3 } from "../../src/phantom/index.js";
 import { dice, voxelDisagreement, centroidDisplacementMm } from "../../src/metrics.js";
@@ -8,8 +8,8 @@ import type { GridGeometry, Mask3D, Vec3 } from "../../src/types.js";
 
 /** THE regression gate: mask -> RTSTRUCT -> mask. Never RT -> mask -> RT. */
 async function roundTrip(mask: Mask3D, geometry: GridGeometry): Promise<Mask3D> {
-  const bytes = await RTStructImpl.createFromMask({ mask, name: "PHANTOM" });
-  const rt = await RTStructImpl.load({ rtstruct: bytes, geometry });
+  const bytes = await RTStruct.createFromMask({ mask, name: "PHANTOM" });
+  const rt = await RTStruct.load({ rtstruct: bytes, geometry });
   return rt.getMask("PHANTOM");
 }
 

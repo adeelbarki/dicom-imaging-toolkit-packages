@@ -5,15 +5,15 @@
  */
 import { createUniformGrid } from "../src/geometry/grid-geometry.js";
 import { writeRTStruct } from "../src/dicom/port.js";
-import { RTStructImpl } from "../src/index.js";
+import { RTStruct } from "../src/index.js";
 
 const grid = createUniformGrid({ rows: 32, columns: 32, planeCount: 8, pixelSpacing: [1, 1], sliceSpacingMm: 1 });
 
-// writeRTStruct (dicom/port.ts) is the low-level writer RTStructImpl.createFromMask
+// writeRTStruct (dicom/port.ts) is the low-level writer RTStruct.createFromMask
 // uses internally; it also accepts an ROI with zero contours, which a real RTSTRUCT
 // can legally contain (e.g. a structure that was defined but never contoured).
 const bytes = writeRTStruct({ rois: [{ name: "EmptyStructure", contours: [] }] });
-const rt = await RTStructImpl.load({ rtstruct: bytes, geometry: grid });
+const rt = await RTStruct.load({ rtstruct: bytes, geometry: grid });
 
 console.log("ROI names:", rt.getROINames());
 console.log("mask voxel count:", rt.getMask("EmptyStructure").count()); // 0 — no contours, but no throw either

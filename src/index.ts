@@ -2,12 +2,15 @@ import { rasterize } from "./contour/rasterize.js";
 import { vectorize } from "./contour/vectorize.js";
 import { createDiagnostic } from "./diagnostics/index.js";
 import { readRTStruct, writeRTStruct } from "./dicom/port.js";
+import { FrameOfReferenceMismatchError } from "./errors.js";
 import type { Diagnostic, DicomVolumeResult, GridGeometry, LoadOptions, Mask3D, Provenance, RoiHandle } from "./types.js";
 
 // Public building blocks — everything needed to construct a GridGeometry or Mask3D
-// from scratch, not just to read/write RTStructImpl. dicom/port.ts is deliberately
-// NOT re-exported here: RTStructImpl.load/createFromMask is the intended DICOM I/O
-// surface (IMPLEMENTATION_PLAN.md section 1).
+// from scratch, not just to read/write RTStruct. dicom/port.ts's ROI read/write
+// internals are deliberately NOT re-exported here: RTStruct.load/createFromMask
+// is the intended RTSTRUCT I/O surface (IMPLEMENTATION_PLAN.md section 1).
+// readSeriesGeometry is a separate, standalone capability (build a GridGeometry from
+// real CT/MR slice files) with no equivalent higher-level wrapper, so it is exported.
 export * from "./types.js";
 export * from "./errors.js";
 export * from "./contour/types.js";
@@ -20,6 +23,7 @@ export * from "./geometry/plane-sort.js";
 export * from "./mask/mask3d.js";
 export * from "./phantom/index.js";
 export * from "./metrics.js";
+export * from "./dicom/series-geometry.js";
 
 export interface LoadParams extends LoadOptions {
   readonly rtstruct: ArrayBuffer;
@@ -42,7 +46,7 @@ interface StoredRoi {
 }
 
 /** The public entry point (IMPLEMENTATION_PLAN.md section 1). Wired to dicom/port.ts. */
-export class RTStructImpl {
+export class RTStruct {
   private readonly rois: ReadonlyMap<string, StoredRoi>;
   private readonly documentDiagnostics: readonly Diagnostic[];
 
@@ -51,7 +55,7 @@ export class RTStructImpl {
     this.documentDiagnostics = documentDiagnostics;
   }
 
-  static async load(params: LoadParams): Promise<RTStructImpl> {
+  static async load(params: LoadParams): Promise<RTStruct> {
     const parsed = readRTStruct(params.rtstruct);
 
     const documentDiagnostics: Diagnostic[] = [];
@@ -65,6 +69,7 @@ export class RTStructImpl {
       );
     }
 
+    const strictness = params.strictness ?? "warn";
     const rois = new Map<string, StoredRoi>();
     for (const roi of parsed.rois) {
       const result = rasterize(roi.contours, params.geometry);
@@ -74,6 +79,21 @@ export class RTStructImpl {
           createDiagnostic("EMPTY_ROI", "warning", `ROI ${JSON.stringify(roi.name)} has no ContourSequence`, {
             roiNumber: roi.roiNumber,
           }),
+        );
+      }
+      if (
+        roi.referencedFrameOfReferenceUID !== undefined &&
+        params.geometry.frameOfReferenceUID !== undefined &&
+        roi.referencedFrameOfReferenceUID !== params.geometry.frameOfReferenceUID &&
+        strictness !== "silent"
+      ) {
+        const message =
+          `ROI ${JSON.stringify(roi.name)} references frame of reference ` +
+          `${roi.referencedFrameOfReferenceUID}, but the supplied geometry is in ` +
+          `${params.geometry.frameOfReferenceUID}`;
+        if (strictness === "strict") throw new FrameOfReferenceMismatchError(message);
+        diagnostics.push(
+          createDiagnostic("FRAME_OF_REFERENCE_MISMATCH", "warning", message, { roiNumber: roi.roiNumber }),
         );
       }
       rois.set(roi.name, {
@@ -87,7 +107,7 @@ export class RTStructImpl {
       });
     }
 
-    return new RTStructImpl(rois, documentDiagnostics);
+    return new RTStruct(rois, documentDiagnostics);
   }
 
   static async createFromMask(params: CreateFromMaskParams): Promise<ArrayBuffer> {
@@ -133,3 +153,12 @@ export class RTStructImpl {
     return volumeCm3 === undefined ? undefined : { value: volumeCm3, unit: "cm3", source: "DICOM ROI Volume (3006,002C)" };
   }
 }
+
+/**
+ * @deprecated `RTStructImpl` was the name used during scaffolding, before this became the
+ * public entry point. Use {@link RTStruct} instead. This alias covers both type and value
+ * position and will be removed in a future major version.
+ */
+export type RTStructImpl = RTStruct;
+/** @deprecated Use {@link RTStruct} instead — see the type alias above. */
+export const RTStructImpl = RTStruct;

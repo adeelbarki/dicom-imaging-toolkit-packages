@@ -32,6 +32,13 @@ export function sortPlanes(
   const reference = planes[0]!.position;
 
   for (const plane of planes) {
+    // Non-finite coordinates (malformed DICOM ImagePositionPatient) never touch normalize()
+    // like direction vectors do — they only feed dot/sub, which produce NaN silently rather
+    // than throwing. Catch that here, at construction, before it corrupts sort order or a
+    // distance comparison downstream.
+    if (plane.position.some((c) => !Number.isFinite(c))) {
+      throw new RangeError(`plane position [${plane.position.join(", ")}] contains a non-finite coordinate`);
+    }
     const offset = perpendicularOffset(plane.position, reference, n);
     if (offset > tolerance.positionMm) {
       throw new NonParallelPlanesError(

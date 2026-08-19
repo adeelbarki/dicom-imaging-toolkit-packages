@@ -175,3 +175,201 @@ page.
 Next version bump (whenever it happens): `npm version patch|minor|major`
 then `npm publish` again — `0.x` is understood as "not yet stable," so
 breaking changes don't require a major bump until `1.0.0`.
+
+npm/GitHub metadata added post-publish (`keywords`, `repository`,
+`homepage`, `bugs` in `package.json`) — won't show on the npm page until
+the next version is published, since npm renders each version's own
+`package.json`.
+
+## `readSeriesGeometry` — SeriesGeometry from real CT/MR files
+
+The biggest practical gap flagged after publishing: every consumer had to
+hand-build a `GridGeometry` themselves — no path from "I have real CT/MR
+slice files" to a usable geometry. Went back to
+`IMPLEMENTATION_PLAN.md` section 1 to confirm scope before building
+anything: `SeriesGeometry` was **already listed as in-scope, non-negotiable
+v0.1** (alongside `GridGeometry`, tolerances, plane ordering, diagnostics,
+provenance, phantoms, the round-trip gate), and `types.ts` already defined
+`SeriesGeometry`/`DicomSliceReference` for exactly this — Phases 1–5 just
+never got around to building it. Not scope creep; the missing piece of the
+original plan.
+
+New: `src/dicom/series-geometry.ts` — `readSeriesGeometry(instances:
+ArrayBuffer[])`. Design choices:
+
+- Kept `dicom/port.ts` as the literal (not just conventional) sole dcmjs
+  importer by extracting a small `readDicomDataset()` helper from
+  `readRTStruct()` and exporting it; `series-geometry.ts` calls that
+  instead of touching dcmjs directly. `readRTStruct()` itself is
+  behavior-preserving after the refactor (covered by the existing IO-*
+  tests).
+- Reused `createGridGeometry()` as-is for the actual plane sorting/dedup/
+  parallelism rejection — no new geometry math. The only new logic is
+  DICOM tag extraction (`SOPInstanceUID`, `ImagePositionPatient`,
+  `ImageOrientationPatient`, `PixelSpacing`, `Rows`, `Columns`,
+  `FrameOfReferenceUID`) and cross-instance consistency validation.
+- Rows/columns/pixel spacing/orientation inconsistency across instances
+  **throws** (`InconsistentSeriesError`, new in `errors.ts`) rather than
+  producing a diagnostic — v0.1's grid model has exactly one value for
+  each, not per-plane, so there's no tolerant fallback to offer, same
+  reasoning as `NonParallelPlanesError`.
+- `SLICE_ORDER_REVERSED` — a `DiagnosticCode` that already existed in
+  `types.ts` and was unused anywhere in the codebase — turned out to be
+  exactly the right fit here: emitted when the input array's z-projections
+  are strictly decreasing (the exact reverse of the sort order
+  `createGridGeometry` requires). Strong signal this is what it was added
+  for originally.
+- `readSeriesGeometry` is re-exported from `src/index.ts` (unlike
+  `dicom/port.ts`'s ROI read/write internals) — there's no higher-level
+  wrapper class for it the way `RTStructImpl` wraps RTSTRUCT I/O, so it's
+  a standalone public function.
+
+Test fixtures: new `writeCTSlice()` in `port.ts` (test-fixture-only, same
+category as `writeRTStruct`'s `shuffleSequences`/`omitRTROIObservations`
+knobs — real code never writes a CT image, only tests need one). New
+`tests/unit/series-geometry.test.ts`, named descriptively rather than with
+fake spec IDs (`GEO-2x` etc.) since this is new functionality added after
+the original 44-test v0.1 contract, not part of it. 4 tests: consistent
+series builds the expected grid, reversed input triggers the diagnostic
+and still sorts correctly, mismatched `PixelSpacing` throws, single-
+instance series still works.
+
+**Bug caught while writing `examples/05-series-geometry.ts`:** used
+illustrative UIDs like `"...3680043.example.series"` (readable, but
+contains letters). DICOM UIDs are strictly digit-and-dot notation per
+PS3.5, and dcmjs's `UniqueIdentifier` VR silently strips any character
+that isn't `0-9` or `.` on read (`removeInvalidUidChars`) — so the example
+printed `frameOfReferenceUID: 1.2.826.0.1.3680043..` (letters gone, dots
+collapsed together). Not a library bug, but real, correct DICOM behavior
+that would have shipped a broken example. Fixed by using purely numeric
+UIDs, matching real-world DICOM convention. The test file was already
+numeric-only and unaffected.
+
+`npm run typecheck`, `check:deps`, and `npm test` all green — 48/48
+(44 original + 4 new). Rebuilt, packed, and verified end to end against
+the actual installed tarball again: `readSeriesGeometry` reachable from
+`"rtstruct-js"`, `writeCTSlice` correctly NOT reachable (confirmed via
+`SyntaxError: does not provide an export named 'writeCTSlice'`), and a
+synthetic multi-slice series correctly round-tripped through
+`RTStructImpl.createFromMask`/`.load`.
+
+Not yet done: trying this against a real downloaded DICOM series (user is
+sourcing one from TCIA); CI; a `.github/workflows` file.
+
+## 0.2.0 correctness pass — Frame of Reference bug + external review fixes
+
+Reviewing the codebase against 0.2.0 goals ("correctness over features")
+surfaced a real bug in already-shipped 0.1 surface: `GridGeometry.equals()`
+never compared `frameOfReferenceUID` despite `fingerprint()` already
+including it, so two grids in different, non-comparable coordinate systems
+could test as equal. Fixed: `equals()` now short-circuits to `false` when
+both sides declare a FoR and they differ; falls through (unaffected) when
+either side is unset, since `createUniformGrid`/phantoms never set one.
+Compounding it, `RTStructImpl.load()` never read the RTSTRUCT's own
+`ReferencedFrameOfReferenceUID` (Type 1 per ROI, PS3.3 C.8.8.5) at all — no
+cross-check existed between what the file declares and the geometry the
+caller supplies. Fixed via a new `FRAME_OF_REFERENCE_MISMATCH` diagnostic
+plus a new `FrameOfReferenceMismatchError`, gated on `LoadOptions.strictness`
+(`"warn"` default/diagnostic-only, `"strict"` throws, `"silent"` neither) —
+the first real use of `strictness`, which was previously accepted but never
+read anywhere. 8 new tests (GEO-08..10, IO-09..13), 56/56 green at that
+point.
+
+Also caught during the same review, still open (0.2.0/0.3.0 candidates, not
+yet fixed): `Provenance.sliceAssociation` is typed as
+`"sop-reference" | "geometric-fallback"` but only `"geometric-fallback"` is
+ever produced — `ContourImageSequence` is never read. `holeInterpretation`
+is inferred from contour *count* on a plane, not verified geometric
+nesting — two disjoint non-nested shapes get labeled `"nested-even-odd"`
+same as genuinely nested ones (fill is correct either way; only the
+provenance label is a guess). `HoleInterpretation` includes `"keyhole"` but
+nothing ever produces it. `CONTOUR_PLANE_DISTANCE` and
+`MISSING_CONTOUR_IMAGE_SEQUENCE` are dead `DiagnosticCode`s, never emitted.
+`isUniformlySpaced()` exists on `GridGeometry` but nothing calls it.
+
+Separately, ran an external README/API review and fixed what didn't need
+CI (CI itself stays deferred per user instruction):
+
+- **`RTStructImpl` → `RTStruct`.** The `-Impl` name was scaffolding that
+  leaked into the public API. Renamed the class; kept `RTStructImpl` as a
+  `@deprecated` alias (both type and value position) so nothing breaks —
+  tested explicitly (IO-14: `RTStructImpl === RTStruct`, still functions).
+  All internal usage (examples, tests, README) switched to `RTStruct`.
+- **Added a `## Limitations` section** near the top of the README — no
+  `volume({ method: "contour" })`, no boolean ops/margin/centroid utility,
+  parallel-planes-only, geometry must be supplied by the caller, plus the
+  two still-open provenance gaps above (slice association, hole labeling)
+  disclosed explicitly rather than left implicit.
+- **Added a feature bullet for the three-hole-encoding equivalence**
+  (nested/XOR/keyhole → identical mask) near the top — previously only
+  visible as an error class name. Deliberately did *not* reuse the
+  reviewer's exact suggested wording ("validated against a torus with a
+  closed-form volume") since that conflates two different tests:
+  `holes.test.ts` proves the three encodings agree with each other (on a
+  plain ring, no closed-form check), while `phantom.test.ts`'s torus test
+  separately verifies round-trip volume against a closed-form value. Stated
+  both claims accurately instead of merging them into one.
+- **Moved the dcmjs/adm-zip advisory disclosure** out of the second
+  paragraph into a `## Dependencies` section near the bottom, wording
+  unchanged, so a first-time reader sees what the library does before
+  seeing a security advisory.
+- **Fixed the stale "44 tests" claim** (README hadn't been updated since
+  before the FoR fix; actual count is 57 as of this pass).
+- **Not done, and deliberately not attempted here:** GitHub repo topics,
+  the repo's About-sidebar description text, and tagging `v0.1.0` on the
+  remote. No `gh` CLI is installed in this environment, and pushing a tag
+  is a visible/shared-state action — these need the user to do directly
+  (or explicitly ask for the tag push) rather than being silently taken.
+
+Added `CHANGELOG.md` and bumped `package.json`/`package-lock.json` to
+`0.2.0` via `npm version minor --no-git-tag-version` (deliberately no git
+commit or tag — user wants to review and commit/push themselves).
+
+## `vec3.ts` robustness — external review, same session
+
+Second external review, this time of `src/geometry/vec3.ts`. Two findings,
+both verified by tracing the actual math before agreeing with any of it:
+
+1. `normalize()` checked `len === 0`, so a vector like `[1e-15, 0, 0]`
+   (plausible floating-point noise, not a real direction) passed the check
+   and got scaled by `1/1e-15`, producing a wildly unstable "unit" vector.
+2. `normalize([NaN, 0, 0])` and `normalize([Infinity, 0, 0])` both silently
+   produced `[NaN, NaN, NaN]` — traced exactly: `NaN === 0` is `false`, so
+   the check never catches it; `Infinity * 0 = NaN` in the Infinity case.
+
+Fix, matching the reviewer's own proposed architecture (validate at the
+boundary, not in every primitive): `normalize()` now throws on non-finite
+input and on near-zero (not just exactly-zero) length. This works as the
+boundary check for free because `normalize()` is *only* ever called at grid
+construction (`createGridGeometry`'s row/column direction and their cross
+product, `sortPlanes`, `angleBetween`) — never per-voxel or per-contour-point
+— confirmed via grep before relying on it. `add`/`dot`/`cross`/`scale` stay
+unchecked, per the reviewer's explicit preference, since they're hot-path
+primitives that should trust their inputs.
+
+Found one gap the review's diagram didn't cover: plane *positions*
+(`ImagePositionPatient`) never pass through `normalize` — they only hit
+`dot`/`sub` in `sortPlanes`/`findNearestPlane`, so a NaN position would have
+silently corrupted a distance/sort comparison without ever reaching the new
+guard. Added a matching finite-check in `sortPlanes` (`RangeError`, same
+pattern `series-geometry.ts`'s `extractInstance` already uses for malformed
+DICOM fields) to close that half of the chain too.
+
+Also fixed the `angleBetween` doc comment: it claimed "independent of
+magnitude or sign convention," but flipping one input's sign flips
+`cosTheta`'s sign and `acos(-x) = π - acos(x)` — a genuinely different
+angle. Only the magnitude-independence claim was true.
+
+While adding tests for this, caught and fixed a real bug from the earlier
+FoR-fix session in the same sitting: the new GEO-08/09/10 tests added to
+`tolerance.test.ts` collided with `plane-sort.test.ts`'s pre-existing
+`GEO-10` (part of the original frozen v0.1 spec). Renamed the three new
+ones to plain descriptive names — matching the convention
+`series-geometry.test.ts` already established for genuinely-new,
+not-part-of-the-original-spec tests — rather than extending fake spec IDs.
+
+New tests: `tests/unit/vec3.test.ts` (new file — `vec3.ts` had no dedicated
+test file before, only indirect coverage via grid-geometry/plane-sort
+tests) plus one new case in `plane-sort.test.ts`. 65/65 green, typecheck
+and build clean. `CHANGELOG.md`'s `[0.2.0]` entry updated with this batch
+before anything is committed.

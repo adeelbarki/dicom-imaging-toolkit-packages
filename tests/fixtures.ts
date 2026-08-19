@@ -4,6 +4,7 @@ import type { Contour } from "../src/contour/types.js";
 interface FixtureRoiSpec {
   readonly name: string;
   readonly contours?: readonly Contour[];
+  readonly referencedFrameOfReferenceUID?: string;
 }
 
 interface FixtureSpec {
@@ -28,7 +29,11 @@ function defaultContour(): Contour {
 /** Fixtures are BUILT, never checked in — see IMPLEMENTATION_PLAN.md section 7. */
 export function buildFixture(spec: FixtureSpec): ArrayBuffer {
   return writeRTStruct({
-    rois: spec.rois.map((roi) => ({ name: roi.name, contours: roi.contours ?? [defaultContour()] })),
+    rois: spec.rois.map((roi) => ({
+      name: roi.name,
+      contours: roi.contours ?? [defaultContour()],
+      referencedFrameOfReferenceUID: roi.referencedFrameOfReferenceUID,
+    })),
     shuffleSequences: spec.shuffleSequences,
     omitRTROIObservations: spec.omitRTROIObservations,
   });

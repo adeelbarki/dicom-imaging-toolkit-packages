@@ -6,14 +6,41 @@ known closed-form volumes, not against vendor fixtures — there is no vendor
 DICOM in this repository (no PHI, no licensing question, and vendor files
 carry no ground truth anyway).
 
+**Handles all three hole encodings the same way.** Nested `CLOSED_PLANAR`
+contours, `CLOSEDPLANAR_XOR`, and a single self-touching keyhole contour all
+rasterize to an identical mask — asserted directly, contour-count-for-count,
+in [`tests/unit/holes.test.ts`](tests/unit/holes.test.ts). Round-trip volume
+fidelity is verified separately, against a torus phantom's closed-form volume.
+
 **Status:** published — [`rtstruct-js`](https://www.npmjs.com/package/rtstruct-js)
-on npm, v0.1, all 44 tests green. `dcmjs` (the only DICOM dependency) pulls in a
-high-severity transitive advisory via `adm-zip`, used only by dcmjs features this
-library never touches (`dicom/port.ts` uses `DicomDict`/`DicomMessage`/
-`DicomMetaDictionary` only) — accepted as a known tradeoff, revisit if dcmjs
-ships a fix.
+on npm, v0.1, 57 tests green.
 
 **Standard pinned:** DICOM PS3.3 **2026c**.
+
+## Limitations
+
+What this library does *not* do yet — read this before adopting:
+
+- **You must supply the `GridGeometry` yourself.** The library never reads an
+  image series implicitly. Build one with `createUniformGrid`/
+  `createGridGeometry`, or `readSeriesGeometry` if you have real CT/MR slice
+  files (see below) — there is no automatic "find the referenced series" path.
+- `mask.volume({ method: "contour" })` is not implemented — voxel counting
+  (`method: "voxel"`, the default) is the only supported method.
+- No boolean mask operations (union/intersection/subtraction), no margin
+  expansion, no single-mask centroid or bounding-box utility.
+  `centroidDisplacementMm` compares *two* masks; it isn't a general centroid.
+- Grid planes must be mutually parallel — `NonParallelPlanesError` otherwise.
+  Gantry-tilted or otherwise non-parallel series aren't representable.
+- Contour-to-slice association is always geometric (nearest-plane matching).
+  `ContourImageSequence`'s SOP-instance references aren't read, so
+  `Provenance.sliceAssociation` is always `"geometric-fallback"`, never
+  `"sop-reference"`, even when the file declares an authoritative reference.
+- `holeInterpretation` on a multi-contour plane is inferred from contour
+  *count*, not from verified geometric nesting — two disjoint, non-nested
+  shapes in one ROI on one plane are currently labeled the same way as
+  genuinely nested ones. The rasterized mask is correct either way; only the
+  provenance label is a guess.
 
 ## Install
 
@@ -22,8 +49,12 @@ npm install rtstruct-js
 ```
 
 ```ts
-import { RTStructImpl, createUniformGrid, spherePhantom } from "rtstruct-js";
+import { RTStruct, createUniformGrid, spherePhantom } from "rtstruct-js";
 ```
+
+`RTStructImpl` is still exported as a deprecated alias of `RTStruct` (same class,
+identical behavior) for anyone who adopted the name from v0.1 — it will be removed
+in a future major version, so new code should use `RTStruct`.
 
 ## Develop (from a clone of this repo)
 
@@ -70,13 +101,13 @@ This is the core workflow, and the only gate the library is validated against �
 direction can never be identity):
 
 ```ts
-import { RTStructImpl } from "rtstruct-js";
+import { RTStruct } from "rtstruct-js";
 
-const bytes = await RTStructImpl.createFromMask({ mask, name: "Sphere" });
+const bytes = await RTStruct.createFromMask({ mask, name: "Sphere" });
 // bytes is an ArrayBuffer of real DICOM Part10 data — write it to a .dcm file, send it
 // over the wire, whatever you'd do with any other DICOM object.
 
-const rt = await RTStructImpl.load({ rtstruct: bytes, geometry: grid });
+const rt = await RTStruct.load({ rtstruct: bytes, geometry: grid });
 rt.getROINames();          // ["Sphere"]
 rt.getMask("Sphere");      // Mask3D, rasterized back onto `grid`
 rt.roi("Sphere");          // { name, roiNumber, interpretedType, provenance, diagnostics }
@@ -85,9 +116,28 @@ rt.dicomVolume("Sphere");  // undefined unless the file itself declared ROI Volu
 ```
 
 `geometry` is the grid to rasterize the file's contours onto — normally the geometry of
-the image series the RTSTRUCT references, which you'd build from that series' own DICOM
-metadata (not covered here, since this library takes a `GridGeometry` as input rather
-than reading image series itself).
+the image series the RTSTRUCT references.
+
+### Build a grid from real CT/MR slice files
+
+```ts
+import { readSeriesGeometry } from "rtstruct-js";
+
+// One ArrayBuffer per DICOM slice file (e.g. read via fs.readFileSync), any order —
+// createGridGeometry sorts by physical position regardless of input order.
+const { geometry, diagnostics } = readSeriesGeometry(sliceBytes);
+
+geometry.grid;                 // GridGeometry — use it exactly like createUniformGrid()'s result
+geometry.slices;                // DicomSliceReference[] — sopInstanceUID/imagePositionPatient per slice
+geometry.frameOfReferenceUID;
+diagnostics;                    // e.g. SLICE_ORDER_REVERSED if the input wasn't already sorted
+```
+
+Reads `SOPInstanceUID`, `ImagePositionPatient`, `ImageOrientationPatient`, `PixelSpacing`,
+`Rows`, and `Columns` per instance. `Rows`/`Columns`/`PixelSpacing`/orientation must agree
+across every instance — the grid model has exactly one value for each, not per-plane — a
+mismatch throws `InconsistentSeriesError`; plane *position* can vary freely and doesn't
+need to already be sorted.
 
 ### Compare two masks
 
@@ -120,15 +170,27 @@ console.log(rt.roi("Sphere").provenance.redact());
 ### Errors
 
 `ResourceLimitError` (oversized grid, checked before allocation), `NonParallelPlanesError`
-(v0.1 requires mutually parallel planes), and `XorHomogeneityError` (`CLOSEDPLANAR_XOR`
-mixed with other geometric types in one ROI) are all thrown synchronously — no silent
-fallback.
+(v0.1 requires mutually parallel planes), `XorHomogeneityError` (`CLOSEDPLANAR_XOR`
+mixed with other geometric types in one ROI), `InconsistentSeriesError`
+(`readSeriesGeometry`'s instances disagree on rows/columns/pixel spacing/orientation),
+and `FrameOfReferenceMismatchError` (an ROI's declared Frame of Reference doesn't match
+the geometry passed to `RTStruct.load`, only under `strictness: "strict"` — see below)
+are all thrown synchronously — no silent fallback.
+
+`LoadOptions.strictness` (`"warn"` by default, or `"strict"` / `"silent"`) controls what
+happens when an ROI's `ReferencedFrameOfReferenceUID` disagrees with `geometry`'s own
+`frameOfReferenceUID`: `"warn"` surfaces a `FRAME_OF_REFERENCE_MISMATCH` diagnostic and
+loads anyway, `"strict"` throws `FrameOfReferenceMismatchError`, `"silent"` does neither.
+If either side never declared a Frame of Reference, there's nothing to contradict, so no
+diagnostic fires regardless of strictness. `GridGeometry.equals()` applies the same
+logic: two grids with different, both-declared `frameOfReferenceUID`s are never equal,
+no matter how loose the tolerance.
 
 ## Project structure
 
 ```
 src/
-├── index.ts                public entry point (RTStructImpl + everything re-exported)
+├── index.ts                public entry point (RTStruct + everything re-exported)
 ├── types.ts                public type surface
 ├── errors.ts
 ├── metrics.ts               dice / voxelDisagreement / centroidDisplacement
@@ -141,17 +203,22 @@ src/
 ├── mask/                    Mask3D implementation
 ├── diagnostics/
 ├── phantom/                  cube, sphere, torus + analytic volumes
-└── dicom/port.ts             the only dcmjs importer
-tests/unit/                   spec tests, organized by area (GEO/MSK/VOL/CTR/RT/IO/SEC)
+└── dicom/
+    ├── port.ts                the only dcmjs importer — RTSTRUCT read/write
+    └── series-geometry.ts     readSeriesGeometry: CT/MR slice files -> SeriesGeometry
+tests/unit/                   spec tests, organized by area (GEO/MSK/VOL/CTR/RT/IO/SEC),
+                               plus series-geometry.test.ts (new functionality, not part
+                               of the original v0.1 spec)
 tests/fixtures.ts             builds DICOM bytes at test time via dicom/port.ts (no vendor files)
 ```
 
 `geometry/`, `contour/`, `mask/`, `roi/`, `phantom/` must never import from
 `dicom/` — enforced by `scripts/check-dependency-rule.mjs`, which runs before
 every `npm test`. This keeps a future package split possible and keeps the
-geometry/mask/phantom core usable without DICOM at all. `dicom/port.ts` is
-never re-exported from the public entry point either — `RTStructImpl` is the
-one DICOM I/O surface.
+geometry/mask/phantom core usable without DICOM at all. `dicom/port.ts`'s
+ROI read/write internals are never re-exported from the public entry point
+either — `RTStruct` is the one RTSTRUCT I/O surface. `readSeriesGeometry`
+is exported, since there's no equivalent higher-level wrapper for it.
 
 `Mask3D` and `GridGeometry` are exported as **interfaces**, never classes —
 the moment a consumer relies on dense `Uint8Array` storage, bit-packing
@@ -174,6 +241,14 @@ becomes a breaking change.
    malformed input into confident output.
 6. No network access, no filesystem access.
 7. Not clinically validated. Not a treatment planning system.
+
+## Dependencies
+
+`dcmjs` (the only DICOM dependency) pulls in a
+high-severity transitive advisory via `adm-zip`, used only by dcmjs features this
+library never touches (`dicom/port.ts` uses `DicomDict`/`DicomMessage`/
+`DicomMetaDictionary` only) — accepted as a known tradeoff, revisit if dcmjs
+ships a fix.
 
 ## License
 
