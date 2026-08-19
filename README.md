@@ -6,24 +6,26 @@ known closed-form volumes, not against vendor fixtures — there is no vendor
 DICOM in this repository (no PHI, no licensing question, and vendor files
 carry no ground truth anyway).
 
-**Status:** v0.1 feature-complete (44/44 tests green), builds cleanly to
-`dist/` (CommonJS-and-ESM-consumer-safe, see below), and has been verified
-to actually work when installed as a real npm dependency — but is not yet
-published, and `package.json` is still `"private": true` on purpose. See
-[`.claude/IMPLEMENTATION_PLAN.md`](.claude/IMPLEMENTATION_PLAN.md) for the
-full phase order and scope — all five phases are done, including real
-DICOM read/write via `dicom/port.ts`. `dcmjs` (the only DICOM dependency,
-imported nowhere else) pulls in a high-severity transitive advisory via
-`adm-zip` and declares a newer Node engine requirement than this project
-targets. Decision: accepted for now — `dicom/port.ts` only uses
-`DicomDict`/`DicomMessage`/`DicomMetaDictionary`, never dcmjs's
-zip/anonymizer code path where the advisory lives, and all 44 tests pass
-on the Node version actually in use. Revisit if dcmjs ships a fix, or if
-this gets deployed somewhere stricter. See `.claude/README.md` for detail.
+**Status:** published — [`rtstruct-js`](https://www.npmjs.com/package/rtstruct-js)
+on npm, v0.1, all 44 tests green. `dcmjs` (the only DICOM dependency) pulls in a
+high-severity transitive advisory via `adm-zip`, used only by dcmjs features this
+library never touches (`dicom/port.ts` uses `DicomDict`/`DicomMessage`/
+`DicomMetaDictionary` only) — accepted as a known tradeoff, revisit if dcmjs
+ships a fix.
 
 **Standard pinned:** DICOM PS3.3 **2026c**.
 
-## Install / develop
+## Install
+
+```sh
+npm install rtstruct-js
+```
+
+```ts
+import { RTStructImpl, createUniformGrid, spherePhantom } from "rtstruct-js";
+```
+
+## Develop (from a clone of this repo)
 
 ```sh
 npm install
@@ -32,50 +34,16 @@ npm run typecheck # tsc --noEmit, strict + noUncheckedIndexedAccess
 npm run build      # emits dist/ (declaration files included)
 ```
 
-## Packaging it as a real npm dependency
-
-The package is not published, but it's fully buildable and installable locally —
-useful for trying it in another project, or as the dry run before a real publish:
-
-```sh
-npm run build   # dist/index.js + dist/index.d.ts + everything under src/
-npm pack        # produces rtstruct-js-0.1.0.tgz — the exact tarball `npm publish` would upload
-```
-
-Install that tarball into any other project (`npm install /path/to/rtstruct-js-0.1.0.tgz`)
-and `import { RTStructImpl, createUniformGrid, spherePhantom, dice, ... } from "rtstruct-js"`
-works exactly like a registry package would — this has been verified end to end (import,
-`createFromMask`, `load`, mask round trip) against a real Node ESM consumer, not just this
-repo's own test suite.
-
-**Why that verification mattered:** `dcmjs`'s own package.json maps the ESM `"import"`
-condition to a build file containing `export` syntax but with no `"type": "module"` of its
-own — so plain Node's spec-compliant resolver parses it as CommonJS and throws a
-`SyntaxError`. This repo's tests didn't catch it because vitest's bundler-based resolver is
-more forgiving than Node's native one. `dicom/port.ts` works around it with
-[`createRequire`](https://nodejs.org/api/module.html#modulecreaterequirefilename), which
-forces Node's `"require"` condition (dcmjs's genuinely-CJS build) instead of the broken
-`"import"` one — a standard, documented pattern for ESM code that needs to load a
-CJS-only or incorrectly-dual-published dependency.
-
-To actually publish: pick a license (still `TBD` below), remove `"private": true` from
-`package.json`, `npm login`, then `npm publish`. Not done here — that's a real, public,
-one-way action, so it's left for you to trigger deliberately.
-
 ## Usage
 
-Not published, so `examples/` and the code below import via relative paths, same as the
-tests — but everything shown (`RTStructImpl`, `createUniformGrid`, `spherePhantom`, `dice`,
-etc.) is re-exported from the single `src/index.ts` entry point, so once you've packed and
-installed it locally (see above), `import { RTStructImpl, createUniformGrid } from
-"rtstruct-js"` works exactly the same. [`examples/`](examples/) has four runnable scripts
-covering everything below.
+[`examples/`](examples/) has four runnable scripts covering everything below
+(they import via relative paths since they live inside this repo; anywhere
+else, import from `"rtstruct-js"` as shown here).
 
 ### Build a grid and generate a phantom
 
 ```ts
-import { createUniformGrid } from "./src/geometry/grid-geometry.js";
-import { spherePhantom, analyticVolumeMm3 } from "./src/phantom/index.js";
+import { createUniformGrid, spherePhantom, analyticVolumeMm3 } from "rtstruct-js";
 
 const grid = createUniformGrid({
   rows: 64,
@@ -93,7 +61,7 @@ analyticVolumeMm3.sphere(10); // closed-form ground truth, for comparison
 
 `Mask3D` is an interface — `count()`, `getSliceBuffer(planeIndex)`, and `get(column, row,
 planeIndex)` are the read paths; there's no public constructor, only `createEmptyMask`,
-`maskFromDense` (`src/mask/mask3d.ts`), and the phantom generators.
+`maskFromDense`, and the phantom generators.
 
 ### Round-trip a mask through real DICOM bytes
 
@@ -102,7 +70,7 @@ This is the core workflow, and the only gate the library is validated against �
 direction can never be identity):
 
 ```ts
-import { RTStructImpl } from "./src/index.js";
+import { RTStructImpl } from "rtstruct-js";
 
 const bytes = await RTStructImpl.createFromMask({ mask, name: "Sphere" });
 // bytes is an ArrayBuffer of real DICOM Part10 data — write it to a .dcm file, send it
@@ -124,17 +92,17 @@ than reading image series itself).
 ### Compare two masks
 
 ```ts
-import { dice, voxelDisagreement, centroidDisplacementMm } from "./src/metrics.js";
+import { dice, voxelDisagreement, centroidDisplacementMm } from "rtstruct-js";
 
 dice(reference, predicted);                        // 0..1, higher is better
 voxelDisagreement(reference, predicted);            // absolute count of mismatched voxels
 centroidDisplacementMm(reference, predicted);       // mm between the two masks' centroids
 ```
 
-Per the plan: large structures should gate on Dice + volume error, but Dice is unstable
-for tiny structures (under ~100 voxels) — gate those on absolute voxel disagreement and
-centroid displacement instead. `dice`/`voxelDisagreement`/`centroidDisplacementMm` don't
-enforce this tiering themselves; that judgment call is left to the caller.
+Large structures should gate on Dice + volume error, but Dice is unstable for tiny
+structures (under ~100 voxels) — gate those on absolute voxel disagreement and centroid
+displacement instead. `dice`/`voxelDisagreement`/`centroidDisplacementMm` don't enforce
+this tiering themselves; that judgment call is left to the caller.
 
 ### Diagnostics, provenance, and redaction
 
@@ -153,14 +121,14 @@ console.log(rt.roi("Sphere").provenance.redact());
 
 `ResourceLimitError` (oversized grid, checked before allocation), `NonParallelPlanesError`
 (v0.1 requires mutually parallel planes), and `XorHomogeneityError` (`CLOSEDPLANAR_XOR`
-mixed with other geometric types in one ROI) are all in `src/errors.ts` and thrown
-synchronously — no silent fallback.
+mixed with other geometric types in one ROI) are all thrown synchronously — no silent
+fallback.
 
 ## Project structure
 
 ```
 src/
-├── index.ts                public entry point (RTStructImpl)
+├── index.ts                public entry point (RTStructImpl + everything re-exported)
 ├── types.ts                public type surface
 ├── errors.ts
 ├── metrics.ts               dice / voxelDisagreement / centroidDisplacement
@@ -181,7 +149,9 @@ tests/fixtures.ts             builds DICOM bytes at test time via dicom/port.ts 
 `geometry/`, `contour/`, `mask/`, `roi/`, `phantom/` must never import from
 `dicom/` — enforced by `scripts/check-dependency-rule.mjs`, which runs before
 every `npm test`. This keeps a future package split possible and keeps the
-geometry/mask/phantom core usable without DICOM at all.
+geometry/mask/phantom core usable without DICOM at all. `dicom/port.ts` is
+never re-exported from the public entry point either — `RTStructImpl` is the
+one DICOM I/O surface.
 
 `Mask3D` and `GridGeometry` are exported as **interfaces**, never classes —
 the moment a consumer relies on dense `Uint8Array` storage, bit-packing

@@ -156,3 +156,22 @@ native ESM resolver:
 Verified end to end against the actual installed tarball, not just typing:
 import, `createFromMask`, `load`, and a Dice-1.0 round trip all ran
 correctly from `rtstruct-js` as a package name in a separate Node process.
+
+## Published
+
+MIT license added (`LICENSE`, `package.json` `license`/`author`). User set
+up an npm account, logged in (`npm whoami` → `adeelbarki`), `"private":
+true` was removed, and `rtstruct-js@0.1.0` was published to the public
+registry. The root README was rewritten accordingly — the pre-publish
+"how to publish" instructions and the full dcmjs postmortem narrative both
+moved out of the public README (which now just says "published," links
+the npm page, and gives a one-line dcmjs caveat) and live here instead,
+since that level of detail is dev/maintainer history, not user-facing
+package documentation. `.claude/*` is also no longer linked from the
+public README — those files aren't shipped in the package (`files:
+["dist"]`) and the links were dead weight for anyone landing on the npm
+page.
+
+Next version bump (whenever it happens): `npm version patch|minor|major`
+then `npm publish` again — `0.x` is understood as "not yet stable," so
+breaking changes don't require a major bump until `1.0.0`.
