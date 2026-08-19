@@ -1,8 +1,16 @@
-import dcmjs from "dcmjs";
+import { createRequire } from "node:module";
 import type { Contour, ContourGeometricType } from "../contour/types.js";
 import type { Vec3 } from "../types.js";
 
 // THE ONLY dcmjs importer — see IMPLEMENTATION_PLAN.md section 3.
+//
+// dcmjs's package.json maps the ESM "import" condition to build/dcmjs.es.js,
+// a file containing `export` syntax but with no "type": "module" of its own
+// and no .mjs extension — so Node's own resolver parses it as CommonJS and
+// throws a SyntaxError. `require()` correctly hits the "require" condition
+// (build/dcmjs.js, genuinely CJS) instead, so we go through createRequire
+// rather than a static `import`.
+const dcmjs = createRequire(import.meta.url)("dcmjs");
 const { DicomMetaDictionary, DicomMessage, DicomDict } = dcmjs.data;
 
 const RT_STRUCTURE_SET_STORAGE_SOP_CLASS_UID = "1.2.840.10008.5.1.4.1.1.481.3";

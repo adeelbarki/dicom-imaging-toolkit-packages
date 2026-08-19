@@ -108,7 +108,51 @@ warning, not a hard failure — the full test suite passes on 20.10.0
 regardless) and pulls in `adm-zip`, which carries a high-severity advisory
 (crafted ZIP triggers ~4GB allocation). `dicom/port.ts` never touches
 dcmjs's zip/anonymizer/DICOMDIR features — only `DicomDict`, `DicomMessage`,
-`DicomMetaDictionary` — so the vulnerable code path is never reached here,
-but it's worth knowing about before deploying this anywhere further. The
-only clean fix is downgrading to `dcmjs@0.29.6`, a semver-major step
-backward; not done without being asked.
+`DicomMetaDictionary` — so the vulnerable code path is never reached here.
+**Decision (user call): accepted for now.** Revisit if dcmjs ships a fix,
+or before deploying this anywhere with stricter requirements. The only
+clean fix otherwise is downgrading to `dcmjs@0.29.6`, a semver-major step
+backward.
+
+## Packaging (post-Phase-5)
+
+Added `tsconfig.build.json` (emits `dist/` — declarations included, `src/`
+only) and `package.json` `main`/`types`/`exports`/`files`/`build`/
+`prepublishOnly`. `"private": true` stays on until someone deliberately
+decides to publish — `npm publish` is a real, public, one-way action, not
+something to trigger as a side effect of "make it buildable."
+
+**Two real bugs surfaced by actually installing the built tarball into a
+separate Node project and running it** (`npm pack` → `npm install
+./rtstruct-js-0.1.0.tgz` in a scratch dir → plain `node consumer.mjs`,
+no bundler) — neither was caught by this repo's own test suite, because
+vitest's bundler-based module resolution is more forgiving than Node's
+native ESM resolver:
+
+1. **dcmjs's dual-package hazard.** Its `package.json` maps the ESM
+   `"import"` condition to `build/dcmjs.es.js` — a file containing `export`
+   syntax but with no `"type": "module"` of its own and no `.mjs`
+   extension. Node's spec-compliant resolver decides CJS-vs-ESM from the
+   file's own extension/`type` field, not from which `exports` condition
+   led to it — so it parses that file as CommonJS and throws a
+   `SyntaxError` on the first `export`. Fixed in `dicom/port.ts` by loading
+   dcmjs via `createRequire(import.meta.url)("dcmjs")` instead of a static
+   `import` — this forces Node's `"require"` condition (`build/dcmjs.js`,
+   genuinely CJS) regardless of our own module being ESM. Also let
+   `@types/node` replace the ad hoc `"DOM"` lib entry and the
+   `dicom/dcmjs.d.ts` ambient module stub (both now unnecessary) —
+   `createRequire`'s return type is untyped by design, so nothing about
+   dcmjs needs its own declaration file anymore.
+2. **`src/index.ts` only exported `RTStructImpl`.** Fine for source-tree
+   tests (which import every module by relative path directly), useless as
+   a published package — nothing else was reachable, so a real consumer
+   couldn't build a `GridGeometry` or a phantom at all. Fixed by
+   re-exporting `types.js`, `errors.js`, `contour/*.js`,
+   `geometry/*.js` (grid-geometry, tolerance, vec3, plane-sort),
+   `mask/mask3d.js`, `phantom/index.js`, and `metrics.js` from the barrel.
+   `dicom/port.ts` is deliberately NOT re-exported — `RTStructImpl` stays
+   the one public DICOM I/O surface, per IMPLEMENTATION_PLAN.md section 1.
+
+Verified end to end against the actual installed tarball, not just typing:
+import, `createFromMask`, `load`, and a Dice-1.0 round trip all ran
+correctly from `rtstruct-js` as a package name in a separate Node process.

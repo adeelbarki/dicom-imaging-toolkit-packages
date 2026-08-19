@@ -4,6 +4,23 @@ import { createDiagnostic } from "./diagnostics/index.js";
 import { readRTStruct, writeRTStruct } from "./dicom/port.js";
 import type { Diagnostic, DicomVolumeResult, GridGeometry, LoadOptions, Mask3D, Provenance, RoiHandle } from "./types.js";
 
+// Public building blocks — everything needed to construct a GridGeometry or Mask3D
+// from scratch, not just to read/write RTStructImpl. dicom/port.ts is deliberately
+// NOT re-exported here: RTStructImpl.load/createFromMask is the intended DICOM I/O
+// surface (IMPLEMENTATION_PLAN.md section 1).
+export * from "./types.js";
+export * from "./errors.js";
+export * from "./contour/types.js";
+export * from "./contour/rasterize.js";
+export * from "./contour/vectorize.js";
+export * from "./geometry/grid-geometry.js";
+export * from "./geometry/tolerance.js";
+export * from "./geometry/vec3.js";
+export * from "./geometry/plane-sort.js";
+export * from "./mask/mask3d.js";
+export * from "./phantom/index.js";
+export * from "./metrics.js";
+
 export interface LoadParams extends LoadOptions {
   readonly rtstruct: ArrayBuffer;
   readonly geometry: GridGeometry;

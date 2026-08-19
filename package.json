@@ -1,17 +1,35 @@
 {
   "name": "rtstruct-js",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
   "description": "DICOM RT Structure Set reading and writing, validated against analytic phantoms.",
+  "license": "MIT",
+  "author": "Adeel Khan",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "pretest": "npm run check:deps",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
-    "check:deps": "node scripts/check-dependency-rule.mjs"
+    "check:deps": "node scripts/check-dependency-rule.mjs",
+    "build": "tsc -p tsconfig.build.json",
+    "prepublishOnly": "npm run build && npm test"
   },
   "devDependencies": {
+    "@types/node": "^26.2.0",
     "typescript": "^5.6.3",
     "vitest": "^2.1.4"
   },

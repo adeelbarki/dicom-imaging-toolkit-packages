@@ -6,14 +6,17 @@ known closed-form volumes, not against vendor fixtures — there is no vendor
 DICOM in this repository (no PHI, no licensing question, and vendor files
 carry no ground truth anyway).
 
-**Status:** v0.1 feature-complete (44/44 tests green) but not yet
-published. See [`.claude/IMPLEMENTATION_PLAN.md`](.claude/IMPLEMENTATION_PLAN.md)
-for the full phase order and scope — all five phases are done, including
-real DICOM read/write via `dicom/port.ts`. `dcmjs` (the only DICOM
-dependency, imported nowhere else) pulls in a high-severity transitive
-advisory via `adm-zip` and declares a newer Node engine requirement than
-this project targets. Decision: accepted for now — `dicom/port.ts` only
-uses `DicomDict`/`DicomMessage`/`DicomMetaDictionary`, never dcmjs's
+**Status:** v0.1 feature-complete (44/44 tests green), builds cleanly to
+`dist/` (CommonJS-and-ESM-consumer-safe, see below), and has been verified
+to actually work when installed as a real npm dependency — but is not yet
+published, and `package.json` is still `"private": true` on purpose. See
+[`.claude/IMPLEMENTATION_PLAN.md`](.claude/IMPLEMENTATION_PLAN.md) for the
+full phase order and scope — all five phases are done, including real
+DICOM read/write via `dicom/port.ts`. `dcmjs` (the only DICOM dependency,
+imported nowhere else) pulls in a high-severity transitive advisory via
+`adm-zip` and declares a newer Node engine requirement than this project
+targets. Decision: accepted for now — `dicom/port.ts` only uses
+`DicomDict`/`DicomMessage`/`DicomMetaDictionary`, never dcmjs's
 zip/anonymizer code path where the advisory lives, and all 44 tests pass
 on the Node version actually in use. Revisit if dcmjs ships a fix, or if
 this gets deployed somewhere stricter. See `.claude/README.md` for detail.
@@ -24,14 +27,49 @@ this gets deployed somewhere stricter. See `.claude/README.md` for detail.
 
 ```sh
 npm install
-npm test         # vitest, dependency-rule check runs first (pretest)
+npm test          # vitest, dependency-rule check runs first (pretest)
 npm run typecheck # tsc --noEmit, strict + noUncheckedIndexedAccess
+npm run build      # emits dist/ (declaration files included)
 ```
+
+## Packaging it as a real npm dependency
+
+The package is not published, but it's fully buildable and installable locally —
+useful for trying it in another project, or as the dry run before a real publish:
+
+```sh
+npm run build   # dist/index.js + dist/index.d.ts + everything under src/
+npm pack        # produces rtstruct-js-0.1.0.tgz — the exact tarball `npm publish` would upload
+```
+
+Install that tarball into any other project (`npm install /path/to/rtstruct-js-0.1.0.tgz`)
+and `import { RTStructImpl, createUniformGrid, spherePhantom, dice, ... } from "rtstruct-js"`
+works exactly like a registry package would — this has been verified end to end (import,
+`createFromMask`, `load`, mask round trip) against a real Node ESM consumer, not just this
+repo's own test suite.
+
+**Why that verification mattered:** `dcmjs`'s own package.json maps the ESM `"import"`
+condition to a build file containing `export` syntax but with no `"type": "module"` of its
+own — so plain Node's spec-compliant resolver parses it as CommonJS and throws a
+`SyntaxError`. This repo's tests didn't catch it because vitest's bundler-based resolver is
+more forgiving than Node's native one. `dicom/port.ts` works around it with
+[`createRequire`](https://nodejs.org/api/module.html#modulecreaterequirefilename), which
+forces Node's `"require"` condition (dcmjs's genuinely-CJS build) instead of the broken
+`"import"` one — a standard, documented pattern for ESM code that needs to load a
+CJS-only or incorrectly-dual-published dependency.
+
+To actually publish: pick a license (still `TBD` below), remove `"private": true` from
+`package.json`, `npm login`, then `npm publish`. Not done here — that's a real, public,
+one-way action, so it's left for you to trigger deliberately.
 
 ## Usage
 
-Not published yet, so these import via relative paths — same as the tests and
-[`examples/`](examples/), which has four runnable scripts covering everything below.
+Not published, so `examples/` and the code below import via relative paths, same as the
+tests — but everything shown (`RTStructImpl`, `createUniformGrid`, `spherePhantom`, `dice`,
+etc.) is re-exported from the single `src/index.ts` entry point, so once you've packed and
+installed it locally (see above), `import { RTStructImpl, createUniformGrid } from
+"rtstruct-js"` works exactly the same. [`examples/`](examples/) has four runnable scripts
+covering everything below.
 
 ### Build a grid and generate a phantom
 
@@ -169,4 +207,4 @@ becomes a breaking change.
 
 ## License
 
-TBD.
+[MIT](LICENSE)
