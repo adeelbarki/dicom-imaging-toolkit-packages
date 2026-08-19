@@ -10,11 +10,13 @@ carry no ground truth anyway).
 published. See [`.claude/IMPLEMENTATION_PLAN.md`](.claude/IMPLEMENTATION_PLAN.md)
 for the full phase order and scope — all five phases are done, including
 real DICOM read/write via `dicom/port.ts`. `dcmjs` (the only DICOM
-dependency, imported nowhere else) currently pulls in a high-severity
-transitive advisory via `adm-zip` and declares a newer Node engine
-requirement than this project targets; see `.claude/README.md` for the
-detail. Neither affects `dicom/port.ts`'s actual code path, but resolving
-or accepting that tradeoff is worth a decision before shipping.
+dependency, imported nowhere else) pulls in a high-severity transitive
+advisory via `adm-zip` and declares a newer Node engine requirement than
+this project targets. Decision: accepted for now — `dicom/port.ts` only
+uses `DicomDict`/`DicomMessage`/`DicomMetaDictionary`, never dcmjs's
+zip/anonymizer code path where the advisory lives, and all 44 tests pass
+on the Node version actually in use. Revisit if dcmjs ships a fix, or if
+this gets deployed somewhere stricter. See `.claude/README.md` for detail.
 
 **Standard pinned:** DICOM PS3.3 **2026c**.
 
@@ -25,6 +27,96 @@ npm install
 npm test         # vitest, dependency-rule check runs first (pretest)
 npm run typecheck # tsc --noEmit, strict + noUncheckedIndexedAccess
 ```
+
+## Usage
+
+Not published yet, so these import via relative paths — same as the tests and
+[`examples/`](examples/), which has four runnable scripts covering everything below.
+
+### Build a grid and generate a phantom
+
+```ts
+import { createUniformGrid } from "./src/geometry/grid-geometry.js";
+import { spherePhantom, analyticVolumeMm3 } from "./src/phantom/index.js";
+
+const grid = createUniformGrid({
+  rows: 64,
+  columns: 64,
+  planeCount: 32,
+  pixelSpacing: [1, 1], // [row spacing mm, column spacing mm]
+  sliceSpacingMm: 1,
+});
+
+const mask = spherePhantom(grid, 10); // radius in mm
+mask.count();                 // filled voxels
+mask.volume();                // { valueMm3, method: "voxel" }
+analyticVolumeMm3.sphere(10); // closed-form ground truth, for comparison
+```
+
+`Mask3D` is an interface — `count()`, `getSliceBuffer(planeIndex)`, and `get(column, row,
+planeIndex)` are the read paths; there's no public constructor, only `createEmptyMask`,
+`maskFromDense` (`src/mask/mask3d.ts`), and the phantom generators.
+
+### Round-trip a mask through real DICOM bytes
+
+This is the core workflow, and the only gate the library is validated against —
+`mask -> RTSTRUCT -> mask`, never the reverse (rasterizing is lossy, so going the other
+direction can never be identity):
+
+```ts
+import { RTStructImpl } from "./src/index.js";
+
+const bytes = await RTStructImpl.createFromMask({ mask, name: "Sphere" });
+// bytes is an ArrayBuffer of real DICOM Part10 data — write it to a .dcm file, send it
+// over the wire, whatever you'd do with any other DICOM object.
+
+const rt = await RTStructImpl.load({ rtstruct: bytes, geometry: grid });
+rt.getROINames();          // ["Sphere"]
+rt.getMask("Sphere");      // Mask3D, rasterized back onto `grid`
+rt.roi("Sphere");          // { name, roiNumber, interpretedType, provenance, diagnostics }
+rt.diagnostics;            // every diagnostic across the whole document
+rt.dicomVolume("Sphere");  // undefined unless the file itself declared ROI Volume (3006,002C) — never computed
+```
+
+`geometry` is the grid to rasterize the file's contours onto — normally the geometry of
+the image series the RTSTRUCT references, which you'd build from that series' own DICOM
+metadata (not covered here, since this library takes a `GridGeometry` as input rather
+than reading image series itself).
+
+### Compare two masks
+
+```ts
+import { dice, voxelDisagreement, centroidDisplacementMm } from "./src/metrics.js";
+
+dice(reference, predicted);                        // 0..1, higher is better
+voxelDisagreement(reference, predicted);            // absolute count of mismatched voxels
+centroidDisplacementMm(reference, predicted);       // mm between the two masks' centroids
+```
+
+Per the plan: large structures should gate on Dice + volume error, but Dice is unstable
+for tiny structures (under ~100 voxels) — gate those on absolute voxel disagreement and
+centroid displacement instead. `dice`/`voxelDisagreement`/`centroidDisplacementMm` don't
+enforce this tiering themselves; that judgment call is left to the caller.
+
+### Diagnostics, provenance, and redaction
+
+Diagnostics (`rt.diagnostics`, `roi.diagnostics`) are problems and ambiguities — tolerant
+reading surfaces them instead of silently guessing. Provenance (`roi.provenance`) is
+history — how a result was produced (e.g. `holeInterpretation`, whether slice association
+fell back to geometric matching). Both carry `redact()`, which strips quasi-identifying
+DICOM UIDs — call it before writing either into an application log:
+
+```ts
+for (const d of rt.diagnostics) console.log(d.severity, d.code, d.message);
+console.log(rt.roi("Sphere").provenance.redact());
+```
+
+### Errors
+
+`ResourceLimitError` (oversized grid, checked before allocation), `NonParallelPlanesError`
+(v0.1 requires mutually parallel planes), and `XorHomogeneityError` (`CLOSEDPLANAR_XOR`
+mixed with other geometric types in one ROI) are all in `src/errors.ts` and thrown
+synchronously — no silent fallback.
 
 ## Project structure
 
