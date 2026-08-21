@@ -41,11 +41,6 @@ What this library does *not* do yet — read this before adopting:
   `ContourImageSequence`'s SOP-instance references aren't read, so
   `Provenance.sliceAssociation` is always `"geometric-fallback"`, never
   `"sop-reference"`, even when the file declares an authoritative reference.
-- `holeInterpretation` on a multi-contour plane is inferred from contour
-  *count*, not from verified geometric nesting — two disjoint, non-nested
-  shapes in one ROI on one plane are currently labeled the same way as
-  genuinely nested ones. The rasterized mask is correct either way; only the
-  provenance label is a guess.
 
 ## Install
 
