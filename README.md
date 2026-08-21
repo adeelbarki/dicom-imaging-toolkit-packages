@@ -15,6 +15,11 @@ fidelity is verified separately, against a torus phantom's closed-form volume.
 **Status:** published — [`rtstruct-js`](https://www.npmjs.com/package/rtstruct-js)
 on npm, v0.2, 120 tests green.
 
+**Validated against real DICOM files**, not just phantoms — 5 vendors/tools, real
+keyhole/nested contour distributions, real round-trip fidelity. See
+[VALIDATION.md](https://github.com/adeelbarki/rtstruct-js/blob/main/VALIDATION.md) for
+the full findings (this link works from both GitHub and the npm page).
+
 **Standard pinned:** DICOM PS3.3 **2026c**.
 
 ## Limitations

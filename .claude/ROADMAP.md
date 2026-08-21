@@ -162,21 +162,92 @@ pass when this is picked up, not folded into 0.3.0 planning.
 
 ## Later — real hospital-file validation + published results
 
-Not a code deliverable — an evidence deliverable. Current correctness
-validation is entirely analytic phantoms (cube/sphere/torus with
-closed-form volumes) plus synthetic contour fixtures; deliberately no
-vendor DICOM in the repo (no PHI, no licensing question, and per the
-project's own stated reasoning, vendor files carry no ground truth
-anyway — phantoms do). That proves the math is right; it proves nothing
-about survival through a real Eclipse/RayStation/MIM round trip.
+Not a code deliverable — an evidence deliverable. No longer purely
+blocked/unattempted — real progress made via `scratch/` exploration
+tooling (git-ignored, TCIA REST API, no vendor files ever entered the
+tracked repo). Still not yet turned into the actual publishable document
+this item calls for; that write-up is the remaining work.
 
-Blocked on the maintainer sourcing real (de-identified, licensable)
-RTSTRUCT exports from multiple planning systems — not something to
-attempt autonomously in this session. When available: run them through
-`RTStruct.load`/`createFromMask`, publish agreement numbers and the
-specific failure modes found, most likely as a document alongside the
-README rather than as new library code. Can proceed in parallel with any
-other version's work whenever real fixture data actually exists.
+**Done so far** (`scratch/inspect.ts`, `scratch/real-contour-analysis.ts`,
+all data via `curl` against `services.cancerimagingarchive.net/nbia-api`,
+no NBIA Data Retriever needed):
+
+- 2 vendors/tools confirmed: Plastimatch (open-source; LCTSC collection,
+  3 patients) and Varian/Eclipse-family (commercial; `Manufacturer:
+  "Varian Medical Systems"`, `NSCLC-Radiomics-Interobserver1` collection,
+  1 patient). 43 real ROIs total, all loaded and rasterized with zero
+  errors.
+- Real-contour round trip (load real RTSTRUCT → mask1 → `createFromMask`
+  → reload → mask2 → compare) — the previously-missing half of the gate,
+  since prior validation only round-tripped library-generated phantoms.
+  **43/43 exact: Dice 1.000000, 0 voxel disagreement**, including real
+  multi-hole anatomy (lung planes with up to 7 simultaneous nested
+  contours at once).
+- Point-count inflation measured directly (original `ContourData` points
+  vs. what `vectorize()` emits for the same mask) instead of guessed:
+  Plastimatch ranges 0.31x–3.56x depending on structure shape (thin/
+  tubular structures like SpinalCord/Esophagus actually got *fewer*
+  points from the vectorizer, not more); Varian is a tight bimodal
+  1.00x/2.00x split, mechanism not yet investigated.
+- Real volumes are clinically plausible across all patients (lungs
+  1.8–3.0 L, hearts 550–750 cm³, cord ~60 cm³) — an independent sanity
+  check nobody had explicitly run before.
+- Confirmed one real interoperability finding is NOT a one-off: variable
+  `RTROIInterpretedType` population (empty vs. `"ORGAN"`) recurs across
+  different patients within the same Plastimatch-authored collection, not
+  just the one file that first surfaced it.
+- Two more vendors added: MIM Software Inc. (`Soft-tissue-Sarcoma`,
+  patient `STS_010` — 6 RTSTRUCT files on one CT, exercised
+  `FRAME_OF_REFERENCE_MISMATCH` and `CONTOUR_PLANE_DISTANCE` for real,
+  since some of the 6 were authored on a different series' frame) and
+  Elekta (`Vestibular-Schwannoma-SEG`, patient `VS-SEG-199` — first
+  MR-based grid tested, not CT; a `*Skull` ROI with 31 simultaneous
+  nested/keyhole contours on one plane). 5 vendors/tools total now:
+  Plastimatch, Varian, MIM, Elekta, plus the OHIF-tagged majority of
+  TCIA's RTSTRUCT corpus not yet sampled.
+- **Real keyhole contours found — confirmed, not just theorized.**
+  Wrote `scratch/scan-encodings.ts`: exact (not approximate) revisit of a
+  coordinate within the same `CLOSED_PLANAR` contour, non-adjacently.
+  Verified by hand on one example (LCTSC `Lung_R`, plane at z=-400.2):
+  points 23↔43 and 24↔42 are bit-identical, and points 25–41 trace a
+  complete separate inner loop between them — outer boundary → channel in
+  → full inner loop → channel back out → outer boundary continues.
+  Textbook keyhole shape, same structure as the synthetic `keyhole()`
+  helper in `tests/unit/holes.test.ts`. Real distribution: **Elekta's
+  `*Skull` is 92% keyhole-encoded (213/232 contours)** — anatomically
+  sensible, a skull cross-section has many internal cavities a
+  boundary-tracer represents as channels rather than separate nested
+  loops; LCTSC/Plastimatch lungs show it at 4–6%; `NSCLC-LUNG1-001`,
+  `Varian-interobs11`, and `MIM-STS_010` show zero (they use plain nested
+  contours instead). This retroactively explains why LCTSC/Elekta lung
+  and skull ROIs never triggered `NESTED_CLOSED_PLANAR_INTERPRETED`
+  earlier — a keyhole is a single self-touching polygon, nothing to
+  detect nesting *between* — and confirms the rasterizer's even-odd fill
+  (the same logic `CTR-03` tests synthetically) has been silently getting
+  these right the entire time on real clinical files.
+- `CLOSEDPLANAR_XOR` remains completely unconfirmed: 0 occurrences across
+  2,498 real contours scanned (13 RTSTRUCT files, 5 vendors/tools). May
+  simply be rare/legacy in practice, or none of the collections sampled
+  so far happen to use it — can't distinguish those two from this data
+  alone.
+
+**Still open:**
+
+- Real `CLOSEDPLANAR_XOR` evidence — still zero, see above. Would need
+  either a much larger/more diverse sample, or a way to search TCIA by
+  contour encoding style directly (no such metadata field exists).
+- The Heart point-count anomaly (0.42x in one Plastimatch patient vs.
+  3.27x/3.56x in two others, same structure, same tool family) — likely
+  ordinary per-patient contour-density variation in the source files, but
+  not actually confirmed.
+- The Varian point-count 1.00x/2.00x bimodal split — mechanism not
+  investigated.
+- The actual write-up: turn the above into the publishable
+  agreement-numbers document this item was meant to produce. Everything
+  needed to start it already exists in `scratch/` output — this is now
+  almost entirely a writing task, not a data-gathering one.
+- Tolerance re-derivation (linked item, above) — still not attempted;
+  would use this same real multi-vendor data once enough of it exists.
 
 ## 0.4.0 and beyond — ROI/mask operations
 
@@ -200,6 +271,21 @@ not folded into 0.3.0:
 - Parse-time DICOM validation beyond the ContourData-length fix already
   shipped: `NumberOfContourPoints` cross-check, duplicate-ROI-number
   detection, orphan-reference detection.
+- A diagnostic for a present-but-empty `RTROIInterpretedType` (DICOM Type
+  2 — required to be present, value allowed to be empty). Today the
+  library only flags the *sequence entirely missing* case
+  (`MISSING_RT_ROI_OBSERVATIONS`, document-level); a per-ROI observation
+  entry that exists but declares `RTROIInterpretedType: ""` reads through
+  silently as `""` (correctly — not defaulted to `"ORGAN"`, since that
+  would fabricate a clinical claim the file never made — see the
+  `??`-only-substitutes-on-null/undefined behavior in `src/dicom/port.ts`).
+  Confirmed against a real file: TCIA's LCTSC collection, patient
+  `LCTSC-Test-S1-101` (Plastimatch-generated RTSTRUCT) has exactly this —
+  5 ROIs, all with `RTROIInterpretedType` present and explicitly empty,
+  verified via the raw DICOM tag (`300600A4`, VR `CS`, `Value: [""]`),
+  not a parsing bug. The pass-through behavior is correct; the gap is
+  that nothing surfaces it as worth noticing the way the missing-sequence
+  case already does.
 - Editable multi-ROI public API (`RTStruct.create()` / `rt.addROI()` /
   `rt.toDicom()`), original-contour preservation on an unmodified ROI
   (today `load()` immediately rasterizes to mask and doesn't retain the
