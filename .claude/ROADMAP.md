@@ -181,7 +181,7 @@ Each README states its compatibility range explicitly.
 
 ## 5. Phases
 
-### Phase A — Repo migration
+### Phase A — Repo migration — ✅ 2026-08-27 (branch `chore/monorepo-migration`)
 
 1. Create `dicom-imaging-toolkit-packages` with npm workspaces.
 2. Move the existing repo into `packages/rtstruct/` **preserving git
@@ -189,7 +189,14 @@ Each README states its compatibility range explicitly.
    a fresh repo).
 3. Confirm existing tests pass unchanged.
 
-Nothing published.
+Nothing published. Executed with `git mv` directly on the renamed repo (no
+clone needed): every tracked file under `packages/rtstruct/`, `.claude/`
+and `.gitignore` left at root, new private root `package.json`
+(`workspaces: ["packages/*"]`), single regenerated root lockfile.
+`rtstruct-js` package name and version 0.2.1 unchanged — only
+`repository`/`homepage`/`bugs` URLs repointed. `check:deps`, `tsc --noEmit`,
+and all 120 tests pass unchanged from the new path. Full record in
+`.claude/README.md`.
 
 ### Phase B — Extract `rt-geometry-js` 0.1.0
 
