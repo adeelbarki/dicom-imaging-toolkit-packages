@@ -1,11 +1,20 @@
-# Roadmap (post-0.2.1)
+# Roadmap (post-0.2.1) — v2: monorepo expansion
 
 Forward-looking plan only. For what shipped, see `CHANGELOG.md` (public)
 and `.claude/README.md` (internal postmortem/rationale). `.claude/
 IMPLEMENTATION_PLAN.md` is the frozen v0.1 spec — don't edit it to reflect
 later versions, this file is where later planning lives instead.
 
-Original version philosophy (still the frame everything below fits into):
+**This version supersedes the single-package planning that filled this
+file through 0.2.1.** The project is no longer "grow `rtstruct-js`
+in place" — it's a five-package monorepo, renamed to
+**`dicom-imaging-toolkit-packages`**, built around a shared geometry core.
+Everything below is the plan for that; §12 carries forward the
+`rtstruct-js`-specific items from the old plan that this restructuring
+doesn't itself resolve, so nothing already identified gets dropped.
+
+Original version philosophy for the single package (still the frame the
+*content* of `rtstruct-js` fits into, independent of the repo split):
 0.1.0 Foundation → 0.2.0 Correctness + documentation → 0.3.0 Geometry +
 topology robustness → 0.4.0 ROI/mask operations → ... → 1.0.0.
 
@@ -19,79 +28,485 @@ instances (`InconsistentSeriesError` otherwise), flags reversed slice order.
 Documented in `README.md` under "Build a grid from real CT/MR slice files."
 If a future review raises this gap again, check this file and the actual
 code before treating it as real — it was a genuine gap before 0.2.0, closed
-during it.
+during it. This code becomes part of `rtstruct-js`'s DICOM I/O layer after
+the geometry extraction (Phase B/C below) and needs no rework to survive
+the split.
 
-## Still open from the v0.1 exit criteria
+---
 
-`.claude/IMPLEMENTATION_PLAN.md` §8 lists six exit criteria for v0.1. Four
-were actually met (44 tests green, strict typecheck clean, dependency lint
-enforced, README states the seven invariants). Two were not, and neither
-had been carried into this file until this was checked directly against
-the code:
+## 1. Priority order
 
-- **Tolerance defaults re-derived from real multi-vendor data, not
-  guessed.** `DEFAULT_TOLERANCE`'s own doc comment
-  (`src/geometry/tolerance.ts`) still says so explicitly: "not yet
-  re-derived from real multi-vendor DICOM... revisit once real
-  interoperability testing across vendors is possible." This is the same
-  blocker as "real hospital-file validation" below, not a separate one —
-  whenever real multi-vendor exports are available, use them for both:
-  publish the agreement numbers *and* check whether `positionMm: 0.5` /
-  `spacingMm: 0.01` / `directionAngleRad: 1e-3` actually hold, tightening
-  or loosening with evidence instead of the current reasoned guess.
-- **Round-trip gate running in CI on every commit.** No CI config exists
-  (checked — no `.yml`/`.yaml` anywhere in the repo). Explicitly deferred
-  early in the 0.2.0 session ("not implementing CI for now, keep it in
-  plan for later version") but never actually written down until now.
-  Candidate for 0.3.0 alongside the CLI work below, or its own small task
-  — typecheck + full test suite + dependency-rule check on every push,
-  mirroring exactly what's already run manually before every commit this
-  project has made so far.
+| # | Work | Why here |
+|---|---|---|
+| 1 | Repo migration to workspaces (`dicom-imaging-toolkit-packages`) | Prerequisite for everything |
+| 2 | Extract `rt-geometry-js` | Unblocks every downstream package |
+| 3 | `rtstruct-js` 0.3.0 (non-breaking) | Keeps shipped users whole |
+| 4 | CI | Closes an outstanding v0.1 exit criterion |
+| 5 | `rtdose-js` | Highest clinical value; forces `ScalarField3D` |
+| 6 | `dicom-seg-js` | Inherits the scalar layer built in 5 |
+| 7 | `rt-convert-js` | Needs 5 and 6 to exist |
 
-## Still-deferred v0.1 scope, not yet scheduled
+**Sequencing rule:** the geometry extraction happens *before* any new
+domain package is written. Building against `rtstruct-js` first and
+splitting later means untangling two things at once and breaking a public
+API that has already shipped.
 
-§1 of the v0.1 plan explicitly deferred a list of features past v0.1.
-Boolean mask operations and mm-based margin expansion are already tracked
-under "0.4.0 and beyond" below. The rest were never carried into this
-file until now — checked each against the code, none exist:
+**Why SEG is scheduled after dose despite being the larger audience:** it
+depends on `ScalarField3D`, resampling, and histogram machinery, all of
+which dose forces you to get right under harder pressure (dose grids
+never match CT grids, so resampling is unavoidable and load-bearing).
+Building SEG first means building the scalar layer without its toughest
+use case validating it, then reworking it when dose arrives.
 
-- `volume({ method: "contour" })` — still throws `NotImplementedError`
-  ("not implemented yet (Phase 4)"). Natural pairing with the vectorizer
-  work already listed under 0.3.0's geometry/topology track.
-- `centroid()` / `boundingBox()` as general single-mask utilities (today
-  only `centroidDisplacementMm(a, b)` exists, a two-mask comparison, not
-  a general single-mask utility — the README's Limitations section
-  already says this plainly). Natural fit alongside 0.4.0's ROI/mask
-  operations.
-- Distance transforms — no implementation, not yet scoped to any version.
-- A Cornerstone (or similar viewer) adapter — no implementation, no
-  scoping done yet; would need a concrete integration target before
-  planning further.
-- Package split (pure-geometry core vs. DICOM I/O) — no work started,
-  but `scripts/check-dependency-rule.mjs`'s enforced boundary (`geometry/`,
-  `contour/`, `mask/`, `roi/`, `phantom/` never import from `dicom/`) is
-  exactly what keeps this possible later without a rewrite.
-- A WASM accelerator — no implementation, no evidence yet that JS
-  performance is actually a bottleneck for any real workload; revisit
-  only if that evidence shows up.
-- A `ContourEngine` pluggable-interface abstraction — no implementation,
-  no concrete second implementation motivating it yet.
+---
 
-## 0.3.0 — Geometry/topology robustness + a CLI
+## 2. Target shape
 
-Two independent tracks; ship together or split, whichever lands first.
+```
+dicom-imaging-toolkit-packages/     one repository, npm workspaces
+├── package.json                    workspaces: ["packages/*"]
+├── .github/workflows/ci.yml
+├── scripts/
+│   └── check-dependency-rule.mjs   rewritten for package boundaries
+├── docs/
+│   ├── VALIDATION.md               real-file evidence
+│   ├── DVH-METHOD.md               resampling + interpolation decisions
+│   └── FRACTIONAL-SEG.md           probability vs occupancy, calibration
+└── packages/
+    ├── geometry/                   -> rt-geometry-js
+    ├── rtstruct/                   -> rtstruct-js
+    ├── rtdose/                     -> rtdose-js
+    ├── dicom-seg/                  -> dicom-seg-js
+    └── convert/                    -> rt-convert-js
+```
 
-### Remaining geometry/topology gaps (carried over from the 0.2.0 gap analysis)
+Dependency graph — no domain package depends on another:
 
-Identified but deliberately deferred past 0.2.0 as smaller/lower-urgency
-than the ROI-identity and ContourData fixes that shipped in 0.2.1:
+```
+              rt-geometry-js
+         ┌─────────┬─────────┐
+         ↓         ↓         ↓
+   rtstruct-js  rtdose-js  dicom-seg-js
+         └─────────┬─────────┘
+                   ↓
+             rt-convert-js
+```
+
+`rt-convert-js` is the only package allowed to depend on two domain
+packages. This keeps SEG↔RTSTRUCT conversion available without forcing a
+dose user to install a polygon rasterizer, or a SEG user to install RT
+contour machinery.
+
+---
+
+## 3. The shared core: three data types
+
+The central architectural change in v2. `Mask3D` is boolean; both RTDOSE
+and fractional SEG are **scalar** — a number per voxel. That is one
+abstraction, not two.
+
+```
+GridGeometry      the sampling grid              (exists)
+Mask3D            boolean per voxel               (exists)
+ScalarField3D     number per voxel                NEW
+```
+
+`ScalarField3D` is used by:
+
+- `rtdose-js` — dose in Gy per voxel
+- `dicom-seg-js` — FRACTIONAL probability or occupancy per voxel
+
+### Histogram machinery generalizes
+
+A dose-volume histogram is *"histogram a scalar field, restricted to a
+mask."* Swap dose for probability and the identical code produces a
+confidence histogram. So this lives in geometry, not in rtdose:
+
+```ts
+histogram(field: ScalarField3D, mask: Mask3D, opts): Histogram
+volumeAboveThreshold(field, mask, threshold): number
+valueAtVolumeFraction(field, mask, fraction): number
+```
+
+- `getD(95, mask)` in dose = `valueAtVolumeFraction(dose, mask, 0.95)`
+- `getV(20, mask)` in dose = `volumeAboveThreshold(dose, mask, 20)`
+- `volumeAboveThreshold(confidence, mask, 0.7)` in SEG = volume the model
+  is at least 70% confident about
+
+One algorithm, three packages. Build it once, in geometry.
+
+### `rt-geometry-js` contents
+
+```
+GridGeometry, GridPlane, GridTolerance, Vec3
+Mask3D, createEmptyMask, maskFromDense
+ScalarField3D, createScalarField                      NEW
+createGridGeometry, createUniformGrid
+sortPlanes, plane ordering + dedupe
+resampling (trilinear + nearest)                      NEW
+histogram / volumeAboveThreshold / valueAtVolumeFraction  NEW
+metrics: dice, voxelDisagreement, centroidDisplacementMm
+phantoms: cube, sphere, torus, analyticVolumeMm3
+errors: GridMismatchError, NonParallelPlanesError, ResourceLimitError
+Diagnostic, Provenance, Severity, redact()
+```
+
+**Moved down from `rtstruct-js`:** phantoms and metrics (neither is
+RTSTRUCT-specific; both needed by the other packages), and
+`planeThicknessMm()` from `mask/mask3d.ts` — a purely geometric
+calculation that geometry should own. Closes an existing roadmap item
+(see §12).
+
+---
+
+## 4. Dependency declarations
+
+Every domain package declares geometry as a **peer dependency**:
+
+```json
+{
+  "peerDependencies": { "rt-geometry-js": "^0.1.0" },
+  "devDependencies":  { "rt-geometry-js": "^0.1.0" }
+}
+```
+
+With a regular `dependencies` entry, npm may install two copies at
+different versions. Then a `Mask3D` produced by one package meets a
+different `GridGeometry` implementation in another and they disagree
+silently — the exact class of bug this architecture exists to prevent.
+
+Each README states its compatibility range explicitly.
+
+---
+
+## 5. Phases
+
+### Phase A — Repo migration
+
+1. Create `dicom-imaging-toolkit-packages` with npm workspaces.
+2. Move the existing repo into `packages/rtstruct/` **preserving git
+   history** (`git subtree` or `git mv` on a clone — not a file copy into
+   a fresh repo).
+3. Confirm existing tests pass unchanged.
+
+Nothing published.
+
+### Phase B — Extract `rt-geometry-js` 0.1.0
+
+1. Move geometry, mask, metrics, phantom, diagnostics, provenance, shared
+   errors into `packages/geometry/`.
+2. Move `planeThicknessMm()` onto `GridGeometry` (§12 item).
+3. **Rewrite `check-dependency-rule.mjs`.** It currently enforces
+   "`geometry/` never imports `dicom/`" by file path. After extraction
+   that boundary is a *package* boundary and the script silently stops
+   checking anything real. New rules:
+   - `packages/geometry` imports no other workspace package
+   - no domain package imports another domain package
+   - only `packages/convert` may import two domain packages
+4. Re-derive `DEFAULT_TOLERANCE` from the 13 real multi-vendor files
+   already collected (`scratch/` tooling, 5 vendors/tools, see §9).
+   Measure actual IPP variance and orientation drift; set the numbers
+   from evidence; update the doc comment in `src/geometry/tolerance.ts`
+   that currently admits they are a reasoned guess. **Closes v0.1 exit
+   criterion**, same item as under §9's "still open."
+5. `ScalarField3D` and the histogram functions may be stubbed here and
+   filled in during Phase E, or built now — either is fine, but the
+   *types* should exist before `rtstruct-js` 0.3.0 publishes so the
+   geometry API doesn't churn immediately after release.
+6. Publish.
+
+### Phase C — `rtstruct-js` 0.3.0
+
+Must break nobody.
+
+1. Add the peer dependency.
+2. **Re-export every geometry type from the public entry point** so
+   existing imports resolve unchanged.
+3. Re-run the full real-file validation set — same 13 files, same
+   expected results — confirming the extraction changed no behaviour.
+4. Consider renaming `RTStructImpl` → `RTStruct` here, keeping the old
+   name as a deprecated alias. A major reshuffle is the natural moment.
+5. Fold in the `rtstruct-js`-specific correctness/robustness gaps carried
+   forward in §12 (finite-coordinate check, vectorizer ordering contract,
+   exact round-trip test, holes-test tightening, topology fixture
+   matrix, and — if there's room — the CLI `validate` command). None of
+   these block the geometry extraction; they're opportunistic additions
+   to the same release.
+6. Publish.
+
+### Phase D — CI
+
+Every push, all packages:
+
+```
+typecheck  (tsc --noEmit, strict + noUncheckedIndexedAccess)
+dependency-rule check
+full test suite including the round-trip gate
+```
+
+**Closes the second outstanding v0.1 exit criterion.**
+
+### Phase E — `rtdose-js` 0.1.0
+
+Builds `ScalarField3D`, resampling, and histograms for real.
+
+```
+DoseGrid                    RTDOSE parse, DoseGridScaling applied
+dose.sample(patientPoint)   interpolated dose at a physical point
+dose.statistics(mask)       min / max / mean
+dose.calculateDVH(mask)     cumulative DVH
+dose.getD(percent, mask)    D95, D50, D2
+dose.getV(gy, mask)         V5, V20, V30
+```
+
+See §6 for decisions required before coding starts.
+
+### Phase F — `dicom-seg-js` 0.1.0
+
+Inherits everything from Phase E.
+
+```
+readSeg(bytes)              BINARY | FRACTIONAL | LABELMAP
+seg.segments()              segment list with coded meanings
+seg.mask(segmentNumber)     Mask3D          (BINARY, LABELMAP)
+seg.field(segmentNumber)    ScalarField3D   (FRACTIONAL, rescaled to 0..1)
+writeSeg({ ... })           BINARY or FRACTIONAL out
+```
+
+See §7 for the fractional-specific requirements.
+
+### Phase G — `rt-convert-js`
+
+```
+segToRtstruct(seg, segmentNumber, opts)
+rtstructToSeg(rt, roiName, opts)
+```
+
+The lossy directions must be documented and diagnosed: RTSTRUCT cannot
+represent fractional data (a threshold must be chosen and recorded), and
+SEG→RTSTRUCT is a vectorization, with all the quantization already
+understood from the existing round-trip work.
+
+---
+
+## 6. Decisions required before rtdose-js
+
+### 6.1 Resampling direction
+
+Dose grids and CT grids are almost never identical — RTDOSE is typically
+2–3mm with different extent and sometimes different orientation. So
+**every DVH computation crosses grids**, and `GridGeometry.equals()`,
+correctly strict for RTSTRUCT, would reject nearly every real
+dose/structure pair.
+
+Two options, different answers:
+
+- Sample dose **at** structure voxel centres
+- Resample the structure **onto** the dose grid
+
+TPS vendors differ. Pick one as the default, expose the other, document
+both in `docs/DVH-METHOD.md`.
+
+### 6.2 Interpolation
+
+Trilinear or nearest-neighbour. Trilinear is the usual default and the
+one that makes `sample()` smooth under a moving cursor.
+
+### 6.3 Partial volume at boundaries
+
+Whether a voxel straddling a structure edge counts fully, not at all, or
+fractionally. Moves D95 and V20 visibly on small structures.
+
+### 6.4 The method travels with the number
+
+As with `volume({ method })`, every dose metric returns its method
+alongside its value.
+
+---
+
+## 7. Fractional SEG requirements
+
+### 7.1 PROBABILITY and OCCUPANCY are not interchangeable
+
+DICOM defines two fractional meanings. PROBABILITY is the probability
+that the segmented property occupies the voxel. OCCUPANCY is the
+proportion of the voxel volume the property occupies. A value of 0.5
+means "50% confident this is tumour" under one and "half this voxel is
+tumour" under the other.
+
+Requirements:
+
+- `writeSeg` **must not** accept fractional data without an explicit
+  fractional type. No default.
+- On read, expose the declared type on the returned field; never discard
+  it.
+- Rescale by `MaximumFractionalValue` (0062,000E) on read — a stored
+  value of x means x / max. Expose the raw integers too, for callers who
+  need them.
+- Emit a diagnostic when values look inconsistent with the declared type
+  (e.g. an OCCUPANCY field that is bimodal at 0 and max, which is a
+  thresholded probability mislabelled).
+
+### 7.2 Confidence is not accuracy
+
+Per-voxel probability is the model's confidence at each location. It is
+not the accuracy of the segmentation, and averaging it does not produce
+one — accuracy needs ground truth unavailable at inference time.
+
+Most model outputs are also **uncalibrated**: a softmax value of 0.9 does
+not mean 90% of such voxels are correct, and networks are typically
+overconfident.
+
+So the library exposes honest quantities only:
+
+```
+meanConfidence(field, mask)
+volumeAboveThreshold(field, mask, t)
+thresholdSensitivity(field, mask)   how volume moves as t moves
+```
+
+and never a single "accuracy" or "% correct" number. `docs/
+FRACTIONAL-SEG.md` states the calibration caveat plainly, so nobody
+builds a misleading UI on top of an honest library.
+
+### 7.3 Cursor sampling comes free
+
+`field.sample(patientPoint)` is the same call as `dose.sample()` against
+a different field. A confidence-under-cursor tooltip therefore costs
+nothing beyond what Phase E already built.
+
+The caveat from 7.2 applies to any UI built on it: displaying "87%
+confidence" implies calibration. Relative presentation (heatmap, or
+high/medium/low banding) is the honest default unless the model was
+explicitly calibrated. This is a documentation obligation, not a library
+feature.
+
+### 7.4 Structural notes
+
+- Overlapping segments are permitted; `SegmentsOverlap` should be read
+  and surfaced rather than assumed.
+- LABELMAP conveys the segment by the integer pixel value matching a
+  Segment Number — this is multi-*segment*, a different axis from
+  multi-*confidence*. Do not conflate the two in the API.
+- SEG references a source series but is **not required to share its
+  spatial sampling or extent**. So SEG↔CT is another grid crossing, and
+  reuses Phase E's resampling.
+
+---
+
+## 8. Clinical boundary
+
+Volume is a measurement. **D95 and V20 are clinical decision criteria.**
+"V20 below 20% for lung" gates plan approval. If this library reports
+19.8% where a planning system reports 20.4%, and someone acts on it, the
+failure mode is categorically different from a slightly-off volume.
+
+- The "not clinically validated, not a treatment planning system"
+  disclaimer goes at the **top** of the `rtdose-js` README.
+- Every dose metric carries its computation method.
+- `docs/DVH-METHOD.md` states resampling, interpolation, and
+  partial-volume choices plainly, so a TPS disagreement is explicable.
+
+Entering the dose-metrics space is a deliberate decision, not a drift.
+Research and QA tooling is a legitimate niche; it should be entered
+knowingly.
+
+---
+
+## 9. Validation strategy
+
+The keyhole scan is the most credible artifact this project has produced.
+Repeat the pattern for each new package, and **build the comparison
+harness before the implementation is finished** so work is checked
+against a reference throughout rather than at the end.
+
+- **Dose:** real RTDOSE + RTSTRUCT pairs from TCIA. Run D95, D50, V20,
+  mean dose through `dicompyler-core` and through `rtdose-js`. Publish the
+  agreement table including disagreements and their explanation.
+- **SEG:** round-trip real FRACTIONAL and BINARY SEG files; compare
+  against `pydicom-seg` / `highdicom` on the same inputs. Record which
+  fractional types appear in the wild, the way the encoding distribution
+  was recorded for RTSTRUCT holes.
+- Carry existing RTSTRUCT evidence into the same document: four-vendor
+  round-trip results, the encoding distribution (Elekta skull 92%
+  keyhole, Plastimatch lungs 4–6%, three vendors 0%, XOR unobserved
+  across 2,498 contours), and the honest gaps. This is the same
+  evidence base referenced in §12's "real hospital-file validation"
+  item and Phase B step 4's tolerance re-derivation — one dataset, three
+  uses.
+
+---
+
+## 10. Web Worker considerations
+
+Both scalar-heavy packages are worker candidates, so transferability is a
+design-time concern.
+
+- Check whether `getSliceBuffer` returns a view into a larger buffer. If
+  so it is not cleanly transferable and needs a copy path or a documented
+  caveat.
+- Dose grids and fractional SEG volumes are large; prefer transferable
+  `ArrayBuffer`s over structured cloning.
+- No package owns worker orchestration — that belongs to the consuming
+  application. The libraries need only be worker-*safe*.
+
+---
+
+## 11. Exit criteria
+
+### `rt-geometry-js` 0.1.0
+- [ ] All migrated tests green
+- [ ] Rewritten dependency-rule script enforcing package boundaries
+- [ ] `DEFAULT_TOLERANCE` derived from real multi-vendor data
+- [ ] `ScalarField3D` and histogram types present (implementation may
+      follow in Phase E)
+- [ ] No DICOM, network, or filesystem dependency
+
+### `rtstruct-js` 0.3.0
+- [ ] Zero breaking changes; geometry types re-exported
+- [ ] Peer dependency declared with a stated range
+- [ ] Real-file validation re-run, results unchanged
+- [ ] CI green on every push
+
+### `rtdose-js` 0.1.0
+- [ ] `DoseGrid` parse with `DoseGridScaling` applied
+- [ ] `sample()`, `statistics()`, `calculateDVH()`, `getD()`, `getV()`
+- [ ] Resampling, interpolation, partial-volume policy in `DVH-METHOD.md`
+- [ ] Agreement table against `dicompyler-core` published
+- [ ] Clinical disclaimer at the top of the README
+
+### `dicom-seg-js` 0.1.0
+- [ ] BINARY, FRACTIONAL, LABELMAP read
+- [ ] BINARY and FRACTIONAL write
+- [ ] Fractional type required on write, preserved on read
+- [ ] `MaximumFractionalValue` rescaling, with raw access retained
+- [ ] `SegmentsOverlap` surfaced
+- [ ] Calibration caveat documented in `FRACTIONAL-SEG.md`
+- [ ] No "accuracy" or "% correct" metric exposed anywhere in the API
+
+### `rt-convert-js` 0.1.0
+- [ ] Both directions, with lossiness documented and diagnosed
+- [ ] Threshold recorded in provenance on any fractional→binary step
+
+---
+
+## 12. Carried forward from the pre-monorepo roadmap
+
+Items identified before this restructuring that the monorepo plan (§1–11)
+doesn't itself resolve. Still real, now re-homed to a phase or package
+above where noted.
+
+### Folded into Phase B/C above (listed here for traceability only)
+
+- Tolerance re-derivation from real multi-vendor data → Phase B step 4.
+- `planeThicknessMm()` onto `GridGeometry` → Phase B step 2.
+- Real hospital-file validation write-up → §9.
+
+### Not yet folded in — `rtstruct-js`-specific, land in Phase C
 
 - No finite-coordinate check on contour points in `contour/rasterize.ts` —
   a NaN/Infinity coordinate from malformed DICOM propagates silently into
   the geometry math today. Grepped, confirmed absent.
-- `planeThicknessMm()` lives in `mask/mask3d.ts`, not on `GridGeometry` —
-  works today (exported, reused by `metrics.ts`), but geometry should own
-  a purely geometric calculation rather than mask/metrics owning it.
 - Vectorizer output ordering/winding is deterministic as a side effect of
   the implementation (fixed iteration order throughout `linkLoops`/
   `boundaryEdges`) but never asserted as an explicit contract or locked in
@@ -109,165 +524,63 @@ than the ROI-identity and ContourData fixes that shipped in 0.2.1:
   islands, island-inside-a-hole, checkerboard, thin one-pixel structures,
   image-border contact) — deliberately deferred in the phantom-review
   round; only diagonal-touching (VECTOR-001) has dedicated coverage today.
+- CLI `validate` command: `npx rtstruct-js validate myfile.dcm`, a thin
+  wrapper around the diagnostics layer that already exists
+  (`src/diagnostics/`, `RTStruct.load(...).diagnostics`), not new
+  correctness logic. Opens a different audience than npm consumers:
+  physicists/QA staff who have a folder of files they don't trust but
+  won't write TypeScript to check them. Scope for a first version: read
+  one or more `.dcm` paths, load each as an RTSTRUCT (need a `geometry`
+  to rasterize onto — either accept a companion series directory to
+  build one via `readSeriesGeometry`, or run in a geometry-less "parse +
+  structural diagnostics only" mode; needs a decision before
+  implementation), print diagnostics with severity, exit non-zero on any
+  `"error"`-severity diagnostic. Needs: a `bin` entry in `package.json`
+  (none exists today), a CLI argument parser (currently zero CLI
+  dependencies in the project — pick something dependency-light).
 
-### CLI validate command
+### Still open, unaffected by the split — later, not yet scheduled to a version
 
-`npx rtstruct-js validate myfile.dcm` — a thin wrapper around the
-diagnostics layer that already exists (`src/diagnostics/`,
-`RTStruct.load(...).diagnostics`), not new correctness logic. Opens a
-different audience than npm consumers: physicists/QA staff who have a
-folder of files they don't trust but won't write TypeScript to check them.
+- `volume({ method: "contour" })` — still throws `NotImplementedError`.
+  Natural pairing with the vectorizer work already in Phase C's list
+  above.
+- `centroid()` / `boundingBox()` as general single-mask utilities (today
+  only `centroidDisplacementMm(a, b)` exists, a two-mask comparison).
+  Fits with the ROI/mask-operations work below once `rt-geometry-js`
+  owns metrics.
+- Distance transforms — no implementation, not yet scoped to any package
+  or version.
+- A Cornerstone (or similar viewer) adapter — no implementation, no
+  scoping done yet; would need a concrete integration target before
+  planning further. Would sit outside the five core packages, likely its
+  own consuming-application concern per §10's worker-orchestration
+  precedent (libraries stay adapter-agnostic).
+- A WASM accelerator — no implementation, no evidence yet that JS
+  performance is actually a bottleneck for any real workload; revisit
+  only if that evidence shows up.
+- A `ContourEngine` pluggable-interface abstraction — no implementation,
+  no concrete second implementation motivating it yet.
 
-Scope for a first version: read one or more `.dcm` paths, load each as an
-RTSTRUCT (need a `geometry` to rasterize onto — either accept a
-companion series directory to build one via `readSeriesGeometry`, or run
-in a geometry-less "parse + structural diagnostics only" mode that skips
-rasterization entirely; needs a decision before implementation, not
-before planning), print diagnostics with severity, exit non-zero on any
-`"error"`-severity diagnostic (today's `Severity` type and diagnostic
-codes should be checked for whether an actual error tier exists yet, or
-only info/warning — may need one added).
+### 0.4.0 and beyond — ROI/mask operations (post-split, lives in rt-geometry-js + rtstruct-js)
 
-Needs: a `bin` entry in `package.json` (none exists today), a CLI
-argument parser (currently zero CLI dependencies in the project — pick
-something dependency-light), decide the geometry-input story above before
-coding starts.
+Includes `union`/`intersection`/mm-based `dilateMm`/`erodeMm` operations —
+genuinely new features, not fixes, so correctly out of scope for Phase C.
+Now that `Mask3D` and the metrics module live in `rt-geometry-js`, these
+operations belong on the shared type there, with `rtstruct-js` consuming
+them rather than owning them.
 
-## Later — DICOM SEG support
-
-The largest single feature under consideration. Not scheduled to a
-specific version yet — deserves its own scoping pass before committing to
-one, given its size relative to everything shipped so far.
-
-Rationale as given: RTSTRUCT stores polygon outlines (radiotherapy-centric,
-smaller audience); SEG stores voxel masks directly (what most medical AI
-segmentation output actually is). Structurally simpler than what this
-library already does for RTSTRUCT — no polygon/vectorize geometry
-involved, closer to a direct `Mask3D` ↔ DICOM SEG serialization. The
-`Mask3D` interface, `GridGeometry`, and the phantom/metrics modules are
-already segmentation-format-agnostic (no RTSTRUCT-specific assumptions
-baked into `mask/`, `geometry/`, `metrics.ts`, `phantom/` — confirmed by
-`scripts/check-dependency-rule.mjs`'s enforced boundary that those modules
-never import from `dicom/`), so a `dicom/seg.ts` alongside the existing
-`dicom/port.ts` should be able to reuse the whole non-DICOM core as-is.
-
-Would also make this library the RTSTRUCT↔SEG conversion path (AI
-produces SEG, treatment planning systems consume RTSTRUCT) — nobody does
-this well in JS today, per the review that raised this.
-
-Needs its own implementation plan (SOP Class, Segment Sequence structure,
-per-segment vs. combined-frame encoding, overlapping-segment handling)
-before scoping into a version number — do that as a separate planning
-pass when this is picked up, not folded into 0.3.0 planning.
-
-## Later — real hospital-file validation + published results
-
-Not a code deliverable — an evidence deliverable. No longer purely
-blocked/unattempted — real progress made via `scratch/` exploration
-tooling (git-ignored, TCIA REST API, no vendor files ever entered the
-tracked repo). Still not yet turned into the actual publishable document
-this item calls for; that write-up is the remaining work.
-
-**Done so far** (`scratch/inspect.ts`, `scratch/real-contour-analysis.ts`,
-all data via `curl` against `services.cancerimagingarchive.net/nbia-api`,
-no NBIA Data Retriever needed):
-
-- 2 vendors/tools confirmed: Plastimatch (open-source; LCTSC collection,
-  3 patients) and Varian/Eclipse-family (commercial; `Manufacturer:
-  "Varian Medical Systems"`, `NSCLC-Radiomics-Interobserver1` collection,
-  1 patient). 43 real ROIs total, all loaded and rasterized with zero
-  errors.
-- Real-contour round trip (load real RTSTRUCT → mask1 → `createFromMask`
-  → reload → mask2 → compare) — the previously-missing half of the gate,
-  since prior validation only round-tripped library-generated phantoms.
-  **43/43 exact: Dice 1.000000, 0 voxel disagreement**, including real
-  multi-hole anatomy (lung planes with up to 7 simultaneous nested
-  contours at once).
-- Point-count inflation measured directly (original `ContourData` points
-  vs. what `vectorize()` emits for the same mask) instead of guessed:
-  Plastimatch ranges 0.31x–3.56x depending on structure shape (thin/
-  tubular structures like SpinalCord/Esophagus actually got *fewer*
-  points from the vectorizer, not more); Varian is a tight bimodal
-  1.00x/2.00x split, mechanism not yet investigated.
-- Real volumes are clinically plausible across all patients (lungs
-  1.8–3.0 L, hearts 550–750 cm³, cord ~60 cm³) — an independent sanity
-  check nobody had explicitly run before.
-- Confirmed one real interoperability finding is NOT a one-off: variable
-  `RTROIInterpretedType` population (empty vs. `"ORGAN"`) recurs across
-  different patients within the same Plastimatch-authored collection, not
-  just the one file that first surfaced it.
-- Two more vendors added: MIM Software Inc. (`Soft-tissue-Sarcoma`,
-  patient `STS_010` — 6 RTSTRUCT files on one CT, exercised
-  `FRAME_OF_REFERENCE_MISMATCH` and `CONTOUR_PLANE_DISTANCE` for real,
-  since some of the 6 were authored on a different series' frame) and
-  Elekta (`Vestibular-Schwannoma-SEG`, patient `VS-SEG-199` — first
-  MR-based grid tested, not CT; a `*Skull` ROI with 31 simultaneous
-  nested/keyhole contours on one plane). 5 vendors/tools total now:
-  Plastimatch, Varian, MIM, Elekta, plus the OHIF-tagged majority of
-  TCIA's RTSTRUCT corpus not yet sampled.
-- **Real keyhole contours found — confirmed, not just theorized.**
-  Wrote `scratch/scan-encodings.ts`: exact (not approximate) revisit of a
-  coordinate within the same `CLOSED_PLANAR` contour, non-adjacently.
-  Verified by hand on one example (LCTSC `Lung_R`, plane at z=-400.2):
-  points 23↔43 and 24↔42 are bit-identical, and points 25–41 trace a
-  complete separate inner loop between them — outer boundary → channel in
-  → full inner loop → channel back out → outer boundary continues.
-  Textbook keyhole shape, same structure as the synthetic `keyhole()`
-  helper in `tests/unit/holes.test.ts`. Real distribution: **Elekta's
-  `*Skull` is 92% keyhole-encoded (213/232 contours)** — anatomically
-  sensible, a skull cross-section has many internal cavities a
-  boundary-tracer represents as channels rather than separate nested
-  loops; LCTSC/Plastimatch lungs show it at 4–6%; `NSCLC-LUNG1-001`,
-  `Varian-interobs11`, and `MIM-STS_010` show zero (they use plain nested
-  contours instead). This retroactively explains why LCTSC/Elekta lung
-  and skull ROIs never triggered `NESTED_CLOSED_PLANAR_INTERPRETED`
-  earlier — a keyhole is a single self-touching polygon, nothing to
-  detect nesting *between* — and confirms the rasterizer's even-odd fill
-  (the same logic `CTR-03` tests synthetically) has been silently getting
-  these right the entire time on real clinical files.
-- `CLOSEDPLANAR_XOR` remains completely unconfirmed: 0 occurrences across
-  2,498 real contours scanned (13 RTSTRUCT files, 5 vendors/tools). May
-  simply be rare/legacy in practice, or none of the collections sampled
-  so far happen to use it — can't distinguish those two from this data
-  alone.
-
-**Still open:**
-
-- Real `CLOSEDPLANAR_XOR` evidence — still zero, see above. Would need
-  either a much larger/more diverse sample, or a way to search TCIA by
-  contour encoding style directly (no such metadata field exists).
-- The Heart point-count anomaly (0.42x in one Plastimatch patient vs.
-  3.27x/3.56x in two others, same structure, same tool family) — likely
-  ordinary per-patient contour-density variation in the source files, but
-  not actually confirmed.
-- The Varian point-count 1.00x/2.00x bimodal split — mechanism not
-  investigated.
-- The actual write-up: turn the above into the publishable
-  agreement-numbers document this item was meant to produce. Everything
-  needed to start it already exists in `scratch/` output — this is now
-  almost entirely a writing task, not a data-gathering one.
-- Tolerance re-derivation (linked item, above) — still not attempted;
-  would use this same real multi-vendor data once enough of it exists.
-
-## 0.4.0 and beyond — ROI/mask operations
-
-Per the original roadmap split (not restated in detail here). Includes
-the `union`/`intersection`/mm-based `dilateMm`/`erodeMm` operations raised
-in the earlier 13-phase-plan gap analysis — genuinely new features, not
-fixes, so correctly out of scope for anything version-numbered as a
-correctness pass.
-
-## Larger architecture, not yet scheduled anywhere
+### Larger architecture, not yet scheduled anywhere
 
 From the 13-phase-plan gap analysis (see `.claude/README.md`, "Twelfth
 review" section, for the full verified breakdown) — real gaps, but
-substantial new architecture rather than contained fixes, so deliberately
-not folded into 0.3.0:
+substantial new architecture rather than contained fixes:
 
 - A DICOM semantic model (`ReferenceImage`/`ReferenceImageSet`) and
   `ContourImageSequence`/SOP-instance-reference plane association —
   today plane association is 100% geometric (nearest-plane + distance
-  tolerance); no SOP reference is read at all.
+  tolerance); no SOP reference is read at all. Relevant to `rtstruct-js`
+  and, once it exists, `dicom-seg-js` (SEG references a source series
+  the same way).
 - Parse-time DICOM validation beyond the ContourData-length fix already
   shipped: `NumberOfContourPoints` cross-check, duplicate-ROI-number
   detection, orphan-reference detection.
@@ -277,9 +590,8 @@ not folded into 0.3.0:
   (`MISSING_RT_ROI_OBSERVATIONS`, document-level); a per-ROI observation
   entry that exists but declares `RTROIInterpretedType: ""` reads through
   silently as `""` (correctly — not defaulted to `"ORGAN"`, since that
-  would fabricate a clinical claim the file never made — see the
-  `??`-only-substitutes-on-null/undefined behavior in `src/dicom/port.ts`).
-  Confirmed against a real file: TCIA's LCTSC collection, patient
+  would fabricate a clinical claim the file never made). Confirmed
+  against a real file: TCIA's LCTSC collection, patient
   `LCTSC-Test-S1-101` (Plastimatch-generated RTSTRUCT) has exactly this —
   5 ROIs, all with `RTROIInterpretedType` present and explicitly empty,
   verified via the raw DICOM tag (`300600A4`, VR `CS`, `Value: [""]`),
