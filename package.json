@@ -1,57 +1,28 @@
 {
-  "name": "rtstruct-js",
-  "version": "0.2.1",
+  "name": "dicom-imaging-toolkit-packages",
+  "version": "0.0.0",
+  "private": true,
   "type": "module",
-  "description": "DICOM RT Structure Set reading and writing, validated against analytic phantoms.",
-  "keywords": [
-    "dicom",
-    "rtstruct",
-    "rt-struct",
-    "radiotherapy",
-    "medical-imaging",
-    "contour",
-    "segmentation",
-    "dcmjs"
-  ],
+  "description": "Monorepo for the DICOM imaging toolkit: a shared geometry core and the RT/SEG domain packages built on it.",
   "license": "MIT",
   "author": "Adeel Khan",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/adeelbarki/rtstruct-js.git"
+    "url": "git+https://github.com/adeelbarki/dicom-imaging-toolkit-packages.git"
   },
-  "homepage": "https://github.com/adeelbarki/rtstruct-js#readme",
+  "homepage": "https://github.com/adeelbarki/dicom-imaging-toolkit-packages#readme",
   "bugs": {
-    "url": "https://github.com/adeelbarki/rtstruct-js/issues"
+    "url": "https://github.com/adeelbarki/dicom-imaging-toolkit-packages/issues"
   },
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
-    }
-  },
-  "files": [
-    "dist"
+  "workspaces": [
+    "packages/*"
   ],
   "engines": {
     "node": ">=20"
   },
   "scripts": {
-    "pretest": "npm run check:deps",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "typecheck": "tsc --noEmit",
-    "check:deps": "node scripts/check-dependency-rule.mjs",
-    "build": "tsc -p tsconfig.build.json",
-    "prepublishOnly": "npm run build && npm test"
-  },
-  "devDependencies": {
-    "@types/node": "^26.2.0",
-    "typescript": "^5.6.3",
-    "vitest": "^2.1.4"
-  },
-  "dependencies": {
-    "dcmjs": "^0.52.0"
+    "test": "npm run test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "build": "npm run build --workspaces --if-present"
   }
 }

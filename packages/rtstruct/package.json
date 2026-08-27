@@ -1,0 +1,58 @@
+{
+  "name": "rtstruct-js",
+  "version": "0.2.1",
+  "type": "module",
+  "description": "DICOM RT Structure Set reading and writing, validated against analytic phantoms.",
+  "keywords": [
+    "dicom",
+    "rtstruct",
+    "rt-struct",
+    "radiotherapy",
+    "medical-imaging",
+    "contour",
+    "segmentation",
+    "dcmjs"
+  ],
+  "license": "MIT",
+  "author": "Adeel Khan",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/adeelbarki/dicom-imaging-toolkit-packages.git",
+    "directory": "packages/rtstruct"
+  },
+  "homepage": "https://github.com/adeelbarki/dicom-imaging-toolkit-packages/tree/main/packages/rtstruct#readme",
+  "bugs": {
+    "url": "https://github.com/adeelbarki/dicom-imaging-toolkit-packages/issues"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "pretest": "npm run check:deps",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "check:deps": "node scripts/check-dependency-rule.mjs",
+    "build": "tsc -p tsconfig.build.json",
+    "prepublishOnly": "npm run build && npm test"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.4"
+  },
+  "dependencies": {
+    "dcmjs": "^0.52.0"
+  }
+}
