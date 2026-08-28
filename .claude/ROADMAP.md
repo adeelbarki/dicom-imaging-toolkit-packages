@@ -305,7 +305,7 @@ full test suite including the round-trip gate
 
 **Closed the second outstanding v0.1 exit criterion.**
 
-### Phase E — `rtdose-js` 0.1.0 — PR 1 + PR 2 + PR 3 ✅, `rtdose-js` 0.1.0 published 2026-08-28 — ⚠️ `rt-geometry-js` 0.1.1 still needs publishing (rtdose-js's peer dep)
+### Phase E — `rtdose-js` 0.1.0 ✅ COMPLETE (2026-08-28) — PR 1–3 merged, `rt-geometry-js` 0.1.1 + `rtdose-js` 0.1.0 both published, CI green
 
 Builds `ScalarField3D`, resampling, and histograms for real.
 
@@ -354,10 +354,11 @@ README; `docs/DVH-METHOD.md` records the three §6 choices and how each derived
 quantity is computed. 24 tests (PARSE-01..11, DG-01..07, DVH-01..06). Typecheck
 + build clean; bare `rt-geometry-js` specifier preserved in `dist/`.
 `check-dependency-rule.mjs` auto-discovered the package, no script change
-needed. **Published to npm 2026-08-28** (`rtdose-js` 0.1.0) — but its peer
-`rt-geometry-js ^0.1.1` is not on npm yet (only 0.1.0 was published in
-PR 1; the 0.1.1 bump merged but was never `npm publish`d). Fix: run
-`npm publish --workspace rt-geometry-js`.
+needed. **Published to npm 2026-08-28** (`rtdose-js` 0.1.0). Its peer
+`rt-geometry-js ^0.1.1` was briefly missing from npm — the 0.1.1 bump from
+PR 1 merged but the `npm publish` was skipped — caught right after and
+published (`rt-geometry-js` 0.1.1, 2026-08-28 23:53Z). Chain is whole:
+`npm install rtdose-js rt-geometry-js` resolves cleanly.
 
 **PR 3 ✅ — validation** vs `dicompyler-core` (branch `feat/rtdose-validation`).
 Harness built **and run** on real TCIA data: **194 / 195 metric comparisons
@@ -610,10 +611,8 @@ design-time concern.
       floor measured at zero across 7 series; values kept, now evidenced)
 - [x] `ScalarField3D` and histogram present (built, not stubbed)
 - [x] No DICOM, network, or filesystem dependency
-- [x] Published to npm — `rt-geometry-js` 0.1.0 (2026-08-27)
-- [ ] **`rt-geometry-js` 0.1.1 (resampling) NOT yet published** — `rtdose-js` 0.1.0's
-      `peerDependencies` requires `^0.1.1`, so this must ship or `rtdose-js` has an
-      unsatisfiable peer. Run `npm publish --workspace rt-geometry-js`.
+- [x] Published to npm — `rt-geometry-js` 0.1.0 (2026-08-27), 0.1.1 / resampling
+      (2026-08-28); `latest` is 0.1.1
 
 ### `rtstruct-js` 0.3.0
 - [x] Zero breaking changes; geometry types re-exported (runtime; `Diagnostic.code`
@@ -635,9 +634,8 @@ design-time concern.
 - [x] Clinical disclaimer at the top of the README
 - [x] CI green on `main` (`check (20)` + `check (22)` both success on `b267e54`)
 - [x] Published to npm — `rtdose-js` 0.1.0 (2026-08-28), 14 files, README + peer dep
-      `rt-geometry-js ^0.1.1` in the packument
-- [ ] **Blocking follow-up:** publish `rt-geometry-js` 0.1.1 (see above) — until then a
-      fresh `npm install rtdose-js` gets an unmet peer
+      `rt-geometry-js ^0.1.1` in the packument; peer `rt-geometry-js` 0.1.1 published the
+      same day, so a fresh install resolves cleanly
 
 ### `dicom-seg-js` 0.1.0
 - [ ] BINARY, FRACTIONAL, LABELMAP read
