@@ -155,6 +155,19 @@ export function rasterize(contours: readonly Contour[], grid: GridGeometry): Ras
         `${contour.geometricType} contour has ${contour.points.length} point(s), at least ${min} required`,
       );
     }
+    // A NaN/Infinity coordinate — a malformed ContourData DS value, or a bad transform
+    // upstream — otherwise flows straight into patientToPixel/findNearestPlane, where every
+    // comparison against it is silently false: the contour vanishes from the fill or lands
+    // on the wrong plane with no error. Reject it here, where the message can still name
+    // the cause.
+    for (const point of contour.points) {
+      if (!point.every((c) => Number.isFinite(c))) {
+        throw new MalformedContourError(
+          `${contour.geometricType} contour has a non-finite point coordinate [${point.join(", ")}] ` +
+            `— likely malformed ContourData (NaN or Infinity)`,
+        );
+      }
+    }
   }
 
   const xorContours = contours.filter((c) => c.geometricType === "CLOSEDPLANAR_XOR");

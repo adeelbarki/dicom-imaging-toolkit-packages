@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { voxelDisagreement, type Vec3 } from "rt-geometry-js";
 import { rasterize } from "../../src/contour/rasterize.js";
 import { MalformedContourError } from "../../src/errors.js";
 import type { Contour } from "../../src/contour/types.js";
-import type { Vec3 } from "rt-geometry-js";
 import { axialGrid } from "../helpers.js";
 
 const ring = (cx: number, cy: number, r: number, z: number, n = 64): Vec3[] =>
@@ -42,14 +42,12 @@ describe("CTR: the three hole encodings must all produce the same mask", () => {
     expect(r.provenance.holeInterpretation).toBe("nested-even-odd");
   });
 
-  it("CTR-02 CLOSEDPLANAR_XOR yields the same mask", () => {
-    expect(rasterize(xor, grid()).mask.count())
-      .toBe(rasterize(nested, grid()).mask.count());
+  it("CTR-02 CLOSEDPLANAR_XOR yields the same mask (voxel-for-voxel, not just the same count)", () => {
+    expect(voxelDisagreement(rasterize(xor, grid()).mask, rasterize(nested, grid()).mask)).toBe(0);
   });
 
-  it("CTR-03 keyhole yields the same mask (half-open edge rule)", () => {
-    expect(rasterize(key, grid()).mask.count())
-      .toBe(rasterize(nested, grid()).mask.count());
+  it("CTR-03 keyhole yields the same mask, voxel-for-voxel (half-open edge rule)", () => {
+    expect(voxelDisagreement(rasterize(key, grid()).mask, rasterize(nested, grid()).mask)).toBe(0);
   });
 
   it("CTR-04 nested interpretation is recorded but is not a loud warning", () => {
@@ -143,6 +141,13 @@ describe("Degenerate contours are rejected before rasterization", () => {
   it("an empty CLOSED_PLANAR contour throws MalformedContourError", () => {
     const empty: Contour = { geometricType: "CLOSED_PLANAR", points: [] };
     expect(() => rasterize([empty], grid())).toThrow(MalformedContourError);
+  });
+
+  it("a non-finite point coordinate is rejected, not silently swallowed by patientToPixel", () => {
+    const nan: Contour = { geometricType: "CLOSED_PLANAR", points: [[0, 0, 0], [1, 0, 0], [NaN, 1, 0]] };
+    const inf: Contour = { geometricType: "CLOSED_PLANAR", points: [[0, 0, 0], [Infinity, 0, 0], [1, 1, 0]] };
+    expect(() => rasterize([nan], grid())).toThrow(MalformedContourError);
+    expect(() => rasterize([inf], grid())).toThrow(MalformedContourError);
   });
 });
 

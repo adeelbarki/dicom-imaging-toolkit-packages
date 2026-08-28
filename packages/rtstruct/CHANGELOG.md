@@ -1,5 +1,57 @@
 # Changelog
 
+## [0.3.0] - 2026-08-27
+
+Monorepo split + topology-robustness pass. **No breaking change for consumers** —
+every geometry export is still importable from `rtstruct-js`.
+
+### Changed
+
+- `rtstruct-js` now lives in the `dicom-imaging-toolkit-packages` monorepo and the
+  geometry core is a separate package, **[`rt-geometry-js`](https://www.npmjs.com/package/rt-geometry-js)**,
+  declared here as a `peerDependency` (`^0.1.0`). Install it alongside `rtstruct-js`.
+  `GridGeometry`, `Mask3D`, `createUniformGrid`, `dice`, phantoms, the geometry errors,
+  and everything else geometry-related are **re-exported** from `rtstruct-js`, so
+  existing `import { … } from "rtstruct-js"` lines keep working unchanged.
+- `rt-geometry-js` also adds `ScalarField3D` and a histogram/DVH engine
+  (`histogram`, `volumeAboveThreshold`, `valueAtVolumeFraction`) — available through the
+  `rtstruct-js` re-export too.
+- **Type-only, non-breaking at runtime:** `Diagnostic.code` is now typed `string` rather
+  than the `DiagnosticCode` union (the geometry core has no RT-specific vocabulary). The
+  `DiagnosticCode` union is still exported for callers that `switch` over it; a
+  `const c: DiagnosticCode = someDiagnostic.code` now needs an explicit assertion.
+- `planeThicknessMm` is now a method on `GridGeometry` (`grid.planeThicknessMm(i)`); the
+  free function is kept as a thin wrapper.
+
+### Fixed
+
+- `rasterize()` now rejects a contour containing a non-finite point coordinate
+  (`NaN`/`Infinity` from malformed `ContourData`) with `MalformedContourError`, instead
+  of letting it flow silently into `patientToPixel`/`findNearestPlane` where every
+  comparison against it is quietly false (contour vanishes from the fill or lands on the
+  wrong plane).
+
+### Added / hardened tests
+
+- Vectorizer output **ordering and winding are now a documented, tested contract**
+  (`VECTOR-ORDER-*`): contours emitted plane-ascending then row-major discovery order;
+  loops wind clockwise in `(column, row)` screen space; hole boundaries wind the other
+  way.
+- New `topology.test.ts` — exact `voxelDisagreement() === 0` mask→contour→mask round
+  trips for single voxel, rectangle, disconnected islands, island-in-a-hole,
+  checkerboard, one-voxel-wide structures, and border-flush structures.
+- `holes.test.ts` CTR-02/CTR-03 tightened from `mask.count()` equality to
+  `voxelDisagreement() === 0`.
+
+### Validation
+
+- The real-file round-trip check was re-run against this release on 3 of the 7
+  validation patients spanning both modalities and 3 authoring tools (Elekta MR,
+  TCIA NSCLC-Radiomics CT, Varian CT — every ROI). Every ROI reproduced the
+  `VALIDATION.md` findings exactly: mask→write→mask round-trip Dice `1.000000`,
+  voxel disagreement `0`, point-count ratios in the documented ranges — confirming
+  the geometry extraction and the fixes above are behaviour-neutral on real data.
+
 ## [0.2.1] - 2026-08-19
 
 Docs-only patch. No code or behavior changes.

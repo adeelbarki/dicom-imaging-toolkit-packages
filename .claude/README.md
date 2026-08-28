@@ -1187,3 +1187,71 @@ Phase B is now fully closed. `rtstruct-js` on npm is still 0.2.1 — its
 `peerDependencies: { rt-geometry-js: ^0.1.0 }` wiring only reaches
 consumers with the 0.3.0 release in Phase C. Next: Phase C (rtstruct-js
 0.3.0) or Phase D (CI), per the roadmap priority table.
+
+## Phase C — rtstruct-js 0.3.0 (2026-08-27)
+
+Branch `feat/rtstruct-0.3.0`. Steps 1, 2, 4 were already satisfied by the
+Phase B extraction (peer dep, full geometry re-export, `RTStructImpl`
+deprecated alias). This PR does step 5 (the §12 correctness/robustness
+gaps), step 3 (validation re-run), the version bump, and the changelog.
+
+### §12 items folded in
+
+- **Finite-coordinate check** (`contour/rasterize.ts`): the top-of-function
+  loop that already checks `MIN_POINTS` now also rejects any point with a
+  non-finite component — `MalformedContourError`, message names NaN/Infinity
+  as the likely cause. Before: a bad coordinate flowed into
+  `patientToPixel`/`findNearestPlane`, where every comparison against NaN is
+  silently false, so the contour vanished from the fill or (via
+  `findNearestPlane` returning `planeIndex: -1`) hit a confusing downstream
+  `RangeError` in `at(planes, -1)`.
+- **Vectorizer ordering/winding contract**: `vectorize()`'s docstring now
+  states it explicitly — contours in ascending `planeIndex`, then in
+  `boundaryEdges` row-major discovery order; each loop's first point is the
+  start of its first-discovered edge; loops wind **clockwise in (column,
+  row) screen space** (y down), holes counter-clockwise; half-integer
+  lattice vertices → exact `rasterize(vectorize(m))`. Locked by
+  `VECTOR-ORDER-01..03` in `vectorize.test.ts` (exact point list for a
+  single voxel; row-major order for two voxels; opposite-sign shoelace for
+  an outer vs. a hole boundary).
+- **Exact round-trip + topology matrix**: new `tests/unit/topology.test.ts`.
+  A `maskFromPattern` helper builds a single-plane mask from an ASCII grid;
+  `roundTripsExactly` asserts `voxelDisagreement(m, rasterize(vectorize(m)))
+  === 0`. TOPO-01..07: single voxel, solid rectangle, two disconnected
+  islands, island-inside-a-hole (nested even-odd), checkerboard (every
+  filled voxel a diagonal-only touch), one-voxel-wide H+V structures,
+  structure flush to the image border. All pass — the half-integer-lattice
+  exactness claim holds for every class.
+- **holes-test tightening**: CTR-02 (XOR) and CTR-03 (keyhole) compared
+  `mask.count()` against the nested-CLOSED_PLANAR result; now
+  `voxelDisagreement(...) === 0` — same-count-but-different-voxels can no
+  longer pass.
+- **CLI `validate`**: NOT done. It's the only §12 item flagged "if there's
+  room", and it still needs the geometry-less-mode vs. companion-series
+  decision. Left as a follow-up.
+
+### Diagnostic.code widening
+
+Recorded in `CHANGELOG` under Changed: `Diagnostic.code` is now `string`
+(the RT-specific `DiagnosticCode` union stayed in `rtstruct-js` during the
+Phase B split; geometry's `createDiagnostic` takes `string`). Runtime
+identical; the only source break is `const c: DiagnosticCode =
+d.code` now needing an assertion. `DiagnosticCode` is still exported.
+
+### Validation re-run (step 3)
+
+`scripts/validation/real-contour-analysis.ts` against 3 of the 7 patients
+— Elekta `VS-SEG-199` (MR), `NSCLC-LUNG1-001` (TCIA NSCLC-Radiomics CT),
+`Varian-interobs11` (CT), every ROI. Every ROI: round-trip Dice
+`1.000000`, voxel disagreement `0`, point-count ratios in the documented
+ranges (exactly `1.00x` on ~half the Varian ROIs, ~2x on lungs — matches
+`VALIDATION.md` Finding 3). The 3 large-mask patients (`LCTSC-Train-S3`,
+`MIM-STS_010` — 200-270 slices, the `*Skull` ROI vectorizes to ~144k
+points) are slow (>2 min each); left for a follow-up. `VALIDATION.md`
+gained a "Re-run history" note; `CHANGELOG` records the scope.
+
+### Not in this PR
+
+CLI `validate` (needs a design decision). CI is Phase D (`feat/ci`).
+Publishing 0.3.0 is step 6 — manual, and should wait until `feat/ci` is
+merged so CI runs against the release.

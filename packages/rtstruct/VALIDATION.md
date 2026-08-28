@@ -18,6 +18,11 @@ collections are pre-de-identified before publication.
 of `.dcm` files — see that directory's own comments for usage. They are not part of the
 published npm package (only `dist/` ships).
 
+**Re-run history**: originally produced for 0.2.x. Re-run for **0.3.0** (the monorepo
+split + geometry extraction) on 3 of the 7 patients — Elekta MR, TCIA NSCLC-Radiomics
+CT, Varian CT, every ROI — with byte-identical results: round-trip Dice `1.000000`,
+voxel disagreement `0`, point-count ratios unchanged. The extraction is behaviour-neutral.
+
 ## Data sources
 
 | Collection | Patients used | Vendor/tool (per file's own `Manufacturer` tag) | License | Citation |
