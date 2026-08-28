@@ -46,6 +46,7 @@
     "typecheck": "tsc --noEmit",
     "check:deps": "node ../../scripts/check-dependency-rule.mjs",
     "build": "tsc -p tsconfig.build.json",
+    "prebuild": "npm run build --workspace rt-geometry-js",
     "prepublishOnly": "npm run build && npm test"
   },
   "peerDependencies": {
