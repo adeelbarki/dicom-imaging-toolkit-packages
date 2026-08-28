@@ -16,12 +16,15 @@ DICOM **RTDOSE** reading and dose-volume histograms, built on
 D/V/mean/DVH queries against a structure mask. `rt-geometry-js` `^0.1.1` is a **peer
 dependency** (the resampling primitive landed in 0.1.1).
 
-**Cross-checked against `dicompyler-core`** on real TCIA RTDOSE + RTSTRUCT + CT triples
-(3 Varian Eclipse pancreas SBRT plans, 5 ROIs each): **194 / 195 metric comparisons within
-tolerance** — mean / D50 / D95 / D2 and every V(d) agree to sub-1%, structure volumes to
-≤ 0.2%. Full table and the one explained outlier (a single-voxel `max`-dose boundary
-effect) in [`VALIDATION.md`](VALIDATION.md). This is a reference-implementation agreement
-check, **not** clinical validation — the disclaimer above still stands.
+**Validated against real DICOM files**, not just phantoms — `rtdose-js`'s D2/D50/D95,
+V5Gy/V20Gy/V30Gy, and mean/min/max dose are cross-checked against `dicompyler-core` on real
+TCIA RTDOSE + RTSTRUCT + CT triples (3 Varian Eclipse pancreas SBRT plans, 5 ROIs each):
+**194 / 195 metric comparisons within tolerance**, every clinical quantity agreeing to
+sub-1%, structure volumes to ≤ 0.2%. See
+[VALIDATION.md](https://github.com/adeelbarki/dicom-imaging-toolkit-packages/blob/main/packages/rtdose/VALIDATION.md)
+for the full table and the one explained outlier (a single-voxel `max`-dose boundary
+effect) — this link works from both GitHub and the npm page. Reference-implementation
+agreement is **not** clinical validation; the disclaimer at the top still stands.
 
 **Standard pinned (for doc references):** DICOM PS3.3 **2026c**.
 
