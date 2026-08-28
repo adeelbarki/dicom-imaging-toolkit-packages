@@ -3,7 +3,8 @@
  * (rt-geometry-js `src/tolerance.ts`) is meant to absorb, across the de-identified
  * multi-vendor series in a folder of subfolders.
  *
- * Run with: npx tsx scripts/validation/tolerance-derivation.ts scratch/data-real [scratch/data-lctsc/ct ...]
+ * Run with (from packages/rtstruct/, real DICOM lives in the repo-root scratch/ dir):
+ *   npx tsx scripts/validation/tolerance-derivation.ts ../../scratch/data-real [../../scratch/data-lctsc/ct ...]
  *
  * DEFAULT_TOLERANCE governs exactly two comparisons:
  *   - GridGeometry.equals(a, b)          — are these two grids the same geometry?

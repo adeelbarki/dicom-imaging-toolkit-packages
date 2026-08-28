@@ -1368,3 +1368,106 @@ geometry + 64 rtstruct + 24 rtdose = 178 tests green, build clean, bare
 Not published (manual, user-run, after CI). PR 3 = validation vs
 `dicompyler-core` on real TCIA RTDOSE+RTSTRUCT pairs — needs data + Python,
 may lag.
+
+## Phase E PR 3 — rtdose-js validation harness (2026-08-28)
+
+Branch `feat/rtdose-validation`. Harness only — the agreement table on
+real data needs TCIA RTDOSE+RTSTRUCT pairs and `pip install
+dicompyler-core`, neither in the dev environment. Built and smoke-tested
+so the user can run it and paste results.
+
+`packages/rtdose/scripts/validation/`:
+- `metrics-rtdose-js.ts` — folder (1 RTDOSE + 1 RTSTRUCT + its CT/MR
+  series) -> per-ROI JSON `{ volumeCm3, meanGy/minGy/maxGy, dGy:
+  D2/D50/D95, vCm3/vPct: V5Gy/V20Gy/V30Gy }`. `--method
+  trilinear|nearest`, `--out`. Classifies files via dcmjs
+  (`StructureSetROISequence` / `Modality==RTDOSE` / `Rows`+`PixelData`),
+  `readSeriesGeometry` for the grid, `RTStruct.load` for masks,
+  `DoseGrid` for the metrics.
+- `metrics-dicompyler.py` — same folder + metric shape via
+  `dvhcalc.get_dvh` defaults + `.statistic("D95")` / `.statistic("V20Gy")`
+  / `.relative_volume.statistic(...)`. `pip install dicompyler-core
+  pydicom`, tested target >= 0.5.5.
+- `compare.mjs` — joins by trimmed lowercase ROI name, Markdown table with
+  Δ (rtdose-js − dicompyler-core) + Δ%, flags dose Δ > max(0.5 Gy, 2%) /
+  vol Δ > max(1 cm³, 2%) / V% Δ > 2 pp. Always exits 0 (report).
+- `README.md` — run order + the expected disagreement.
+
+`rtstruct-js` added to `rtdose-js` **devDependencies** for the TS script.
+Dev-only, never in `src/`, so `check-dependency-rule.mjs` (scans `src/`
+imports) does not see it and the "domains don't depend on each other" rule
+is intact; `files: ["dist", ...]` keeps it out of the tarball. `npx tsx`
+resolves it via the workspace symlink; needs a repo-root `npm run build`
+first (same assumption as rtstruct's own validation scripts re:
+`rt-geometry-js` dist).
+
+`packages/rtdose/VALIDATION.md` — method, the resampling-direction
+difference table (rtdose-js: dose->structure grid, trilinear;
+dicompyler-core: structure->dose grid, nearest plane — the expected source
+of most disagreement, worst on small structures / steep gradients), data +
+agreement-table placeholders, a Status box. Not in `files` (in-repo only,
+same as rtstruct's VALIDATION.md).
+
+Smoke test: built a synthetic CT (10x 20x20 @2mm) + RTSTRUCT (one box ROI,
+planes z=4..14, 10x10mm) + RTDOSE (12x12x8 @2mm, dose = 0.5 Gy/mm of z)
+triple and ran `metrics-rtdose-js.ts` — voxelCount 150, volume 1.2 cm³,
+mean 4.5 Gy, min 2 / max 7, D2 7 / D50 5 / D95 2, V5Gy 50% / V20Gy 0, all
+matching the hand calculation. The `rtdose-js` half of the harness is
+therefore proven; only the `dicompyler-core` cross-check is outstanding.
+
+Full gate unchanged (178 tests: 90 + 64 + 24); typecheck + build clean.
+Nothing published.
+
+### Scratch relocation (2026-08-28, on feat/rtdose-validation)
+
+Moved `packages/rtstruct/scratch/` -> repo-root `scratch/` (670 MB: dev
+debug `.ts`, `data/`, `data-lctsc/`, `data-real/` — the 6 TCIA CT/MR +
+RTSTRUCT cases behind rtstruct's keyhole scan). Plain `mv` (never tracked;
+`.gitignore` `scratch/` matches at any depth, still ignored at root).
+Rationale: the monorepo now has two packages with validation harnesses;
+the data should sit above both. Updated `tolerance-derivation.ts`'s usage
+docstring to `../../scratch/...`. None of the existing cases carry an
+RTDOSE, so the rtdose PR 3 agreement table still needs dose-bearing
+downloads (suggested home: `scratch/data-dose/<system>-<patient>/`).
+
+### Phase E PR 3 — validation RUN on real data (2026-08-28)
+
+Downloaded real TCIA data and ran the harness. TCIA's public
+(unauthenticated) API exposes RT dose in only two collections
+(`Pancreatic-CT-CBCT-SEG`, `Vestibular-Schwannoma-SEG`) — the usual
+dose-bearing ones (HNSCC, NSCLC-Cetuximab, Head-Neck-PET-CT, ...) are
+NBIA-login gated. Pulled 3 clean planning triples from
+`Pancreatic-CT-CBCT-SEG` into `scratch/data-dose/Pancreas-CT-CB_{003,014,
+030}/` (Varian Eclipse pancreas SBRT). "Clean" = for each patient, resolve
+the planning RTSTRUCT (`BSPC_LL_LR_ROI_SDPC`), follow its
+`ReferencedFrameOfReferenceSequence` -> `RTReferencedSeriesSequence` to the
+exact planning CT series, verify that CT's `FrameOfReferenceUID` == the
+RTDOSE's, download all three. (The collection has 3 CT series + 4 RTSTRUCTs
+per patient — DIBH planning CT + deformably-registered CBCT-day CTs — so
+picking the right CT matters.)
+
+dicompyler-core gotcha: **0.5.6 needs `pydicom<3`** (imports
+`pydicom.dicomio.read_file`, removed in pydicom 3.0). Ran it in
+`/tmp/dvh-venv` (`pydicom 2.4.5` + `dicompyler-core 0.5.6`).
+`metrics-dicompyler.py` and the validation README now say so.
+
+Result: **194 / 195 metric comparisons within tolerance** (3 patients × 5
+ROIs × 13 metrics). mean / D50 / D95 / D2 and every V(d) agree sub-1%
+despite the opposite resampling directions — the histogrammed volume is
+ROI-interior-dominated where the dose is smooth. Structure volumes agree
+to <= 0.2%. The one outlier: `Stomach_duo` / patient 003 `max` dose,
+rtdose-js 65.6 vs dicompyler 63.8 Gy (+2.7%) — a single-voxel extremum at
+the structure edge; rtdose-js samples the dose at the ~3x finer CT-grid
+voxels near the boundary and catches a hotter penumbra voxel.
+`--method nearest` does NOT close it (resampling-direction / sampling-
+density, not interpolation), and `max` dose isn't a DVH criterion (D2 /
+D0.1cc are, and they agree). Documented in `VALIDATION.md` findings 1-2,
+not a defect.
+
+Also confirmed on real Eclipse dose: `DoseGridScaling` (~4.5e-5) applied
+correctly (absolute-dose agreement proves it), `GridFrameOffsetVector`
+ascending-from-0 (no reorder/offset diagnostics fired), `DoseUnits GY`.
+
+VALIDATION.md agreement table + findings populated. `rtdose-js` 0.1.0 exit
+criteria all met except the manual npm publish. Still open for a later
+pass: non-Varian dose (needs NBIA login), `DoseSummationType BEAM`.
