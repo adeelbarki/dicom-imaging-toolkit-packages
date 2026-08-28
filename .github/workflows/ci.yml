@@ -1,0 +1,49 @@
+name: CI
+
+# Runs on every PR, and on pushes to main after merge. A push to a feature
+# branch is covered once its PR is open (the `pull_request` trigger fires on
+# every subsequent push to that branch).
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # engines require >=20; dcmjs prefers >=22.13, so cover both.
+        node-version: ["20", "22"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+
+      - run: npm ci
+
+      # Package-boundary rule (rt-geometry-js imports no workspace package;
+      # no domain package imports another). Also run inside `npm test` via each
+      # package's pretest, but fail fast here.
+      - run: npm run check:deps
+
+      # tsc --noEmit, strict + noUncheckedIndexedAccess, both packages.
+      - run: npm run typecheck
+
+      # Full suite incl. the mask -> RTSTRUCT -> mask round-trip gate.
+      - run: npm test
+
+      # Catches the published-build resolution path (tsconfig.build.json clears
+      # the `paths` alias, so rt-geometry-js must resolve as a real dep).
+      - run: npm run build

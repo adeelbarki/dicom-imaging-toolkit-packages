@@ -269,9 +269,14 @@ Must break nobody.
    to the same release.
 6. Publish.
 
-### Phase D — CI
+### Phase D — CI — ✅ 2026-08-27 (branch `feat/ci`)
 
-Every push, all packages:
+`.github/workflows/ci.yml`: on every PR + pushes to `main`, Node 20 and 22
+matrix — `npm ci`, `check:deps`, `npm run typecheck` (both packages,
+`tsc --noEmit` strict + `noUncheckedIndexedAccess`), `npm test` (full
+suite incl. the mask→RTSTRUCT→mask round-trip gate), `npm run build`
+(exercises the published-build resolution where `tsconfig.build.json`
+clears the `paths` alias). `concurrency` cancels superseded runs.
 
 ```
 typecheck  (tsc --noEmit, strict + noUncheckedIndexedAccess)
@@ -279,7 +284,7 @@ dependency-rule check
 full test suite including the round-trip gate
 ```
 
-**Closes the second outstanding v0.1 exit criterion.**
+**Closed the second outstanding v0.1 exit criterion.**
 
 ### Phase E — `rtdose-js` 0.1.0
 
