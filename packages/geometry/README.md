@@ -12,6 +12,8 @@ a `Mask3D` built by one meets the same `GridGeometry` implementation in another.
 
 **Standard pinned (for the doc references):** DICOM PS3.3 **2026c**.
 
+**Status:** 0.1.0 — first release, extracted from `rtstruct-js` 0.2.1. See `CHANGELOG.md`.
+
 ## Install
 
 ```sh
@@ -22,14 +24,14 @@ npm install rt-geometry-js
 
 | Area | Exports |
 |---|---|
-| Grid | `createGridGeometry`, `createUniformGrid`, `GridGeometry`, `GridPlane`, `GridTolerance`, `DEFAULT_TOLERANCE` |
+| Grid | `createGridGeometry`, `createUniformGrid`, `GridGeometry` (incl. `.planeThicknessMm()`), `GridPlane`, `GridTolerance`, `DEFAULT_TOLERANCE` |
 | Planes | `sortPlanes` — projection sort, duplicate detection, non-parallel rejection |
 | Mask | `createEmptyMask`, `maskFromDense`, `Mask3D`, `checkVoxelBudget`, `DEFAULT_MAX_VOXELS` |
 | Scalar field | `createScalarField`, `ScalarField3D` — a number per voxel |
 | Histograms / DVH | `histogram`, `volumeAboveThreshold`, `valueAtVolumeFraction` |
 | Phantoms | `cubePhantom`, `spherePhantom`, `torusPhantom`, `analyticVolumeMm3` |
 | Metrics | `dice`, `voxelDisagreement`, `centroidDisplacementMm` |
-| Diagnostics | `createDiagnostic`, `Diagnostic`, `Provenance`, `redact()` |
+| Diagnostics | `createDiagnostic`, `Diagnostic` and `Provenance` (each with a `.redact()` that strips UIDs) |
 | Vectors | `add`, `sub`, `scale`, `dot`, `cross`, `normalize`, `distance`, `length`, `angleBetween` |
 | Errors | `ResourceLimitError`, `NonParallelPlanesError`, `NonOrthogonalBasisError`, `IndeterminateVolumeError`, `GridMismatchError`, `IndeterminateCentroidError`, `FrameOfReferenceMismatchError`, `NotImplementedError` |
 
