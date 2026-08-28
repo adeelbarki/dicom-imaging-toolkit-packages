@@ -23,8 +23,15 @@ nothing here is example code.
 
 - A repo-root `npm install` **and `npm run build`** — the TS script resolves
   `rt-geometry-js` and `rtstruct-js` from their built `dist/` via the workspace symlinks.
-- Python with `pip install dicompyler-core pydicom` (tested against dicompyler-core
-  ≥ 0.5.5).
+- Python. **dicompyler-core 0.5.6 needs `pydicom<3`** (it imports
+  `pydicom.dicomio.read_file`, removed in pydicom 3.0), so use an isolated venv:
+
+  ```sh
+  python3 -m venv /tmp/dvh-venv
+  /tmp/dvh-venv/bin/pip install "pydicom<3" "dicompyler-core==0.5.6" numpy
+  ```
+
+  and call `metrics-dicompyler.py` with `/tmp/dvh-venv/bin/python`.
 
 ## Run
 
@@ -34,7 +41,7 @@ CASE=../../scratch/data-dose/<PlanningSystem>-<PatientID>
 
 npx tsx scripts/validation/metrics-rtdose-js.ts   "$CASE" --method trilinear
 npx tsx scripts/validation/metrics-rtdose-js.ts   "$CASE" --method nearest      # optional, for the method-difference column
-python3   scripts/validation/metrics-dicompyler.py "$CASE"
+/tmp/dvh-venv/bin/python scripts/validation/metrics-dicompyler.py "$CASE"
 
 node scripts/validation/compare.mjs \
   "$CASE"/dvh-rtdose-js.trilinear.json \

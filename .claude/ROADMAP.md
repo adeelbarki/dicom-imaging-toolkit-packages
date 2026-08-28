@@ -305,7 +305,7 @@ full test suite including the round-trip gate
 
 **Closed the second outstanding v0.1 exit criterion.**
 
-### Phase E — `rtdose-js` 0.1.0 — PR 1 + PR 2 ✅ (2026-08-28); PR 3 harness ✅, real-data agreement table pending
+### Phase E — `rtdose-js` 0.1.0 — PR 1 + PR 2 + PR 3 ✅ (2026-08-28); publish 0.1.0 (manual) open
 
 Builds `ScalarField3D`, resampling, and histograms for real.
 
@@ -356,10 +356,16 @@ quantity is computed. 24 tests (PARSE-01..11, DG-01..07, DVH-01..06). Typecheck
 `check-dependency-rule.mjs` auto-discovered the package, no script change
 needed. **Not yet published** (manual, user-run, after CI).
 
-**PR 3 ⏳ — validation** vs `dicompyler-core` (branch `feat/rtdose-validation`).
-Harness **built and merged**; the agreement table on real data is still
-pending a run (needs TCIA RTDOSE+RTSTRUCT pairs + `pip install
-dicompyler-core`, neither in the dev environment).
+**PR 3 ✅ — validation** vs `dicompyler-core` (branch `feat/rtdose-validation`).
+Harness built **and run** on real TCIA data: **194 / 195 metric comparisons
+within tolerance** across 3 Pancreatic-CT-CBCT-SEG patients (Varian Eclipse
+pancreas SBRT) × 5 ROIs. dicompyler-core 0.5.6 + pydicom 2.4.5 (needs a
+`pydicom<3` venv — 0.5.6 imports `pydicom.dicomio.read_file`, gone in
+pydicom 3). mean/D50/D95/D2/V(d) all sub-1%; the single outlier is `max`
+dose on a small OAR (+2.7%, a boundary sampling-density effect — rtdose-js
+samples the dose at the ~3× finer CT-grid voxels near the edge; not an
+interpolation effect, `--method nearest` doesn't change it; `max` isn't a
+DVH criterion). Full table + findings in `packages/rtdose/VALIDATION.md`.
 
 `packages/rtdose/scripts/validation/`:
 - `metrics-rtdose-js.ts` — folder (1 RTDOSE + 1 RTSTRUCT + its CT series) ->
@@ -377,15 +383,14 @@ dicompyler-core`, neither in the dev environment).
   trilinear, dicompyler-core structure->dose grid nearest-plane).
 
 `packages/rtdose/VALIDATION.md` — method, the resampling-direction
-difference table, data-sources + agreement-table placeholders, a Status
-box. The `rtdose-js` side is verified end-to-end on a **synthetic**
-CT+RTSTRUCT+RTDOSE triple (box ROI on a linear dose ramp — every metric
-matched the hand calculation); only the `dicompyler-core` cross-check
-awaits data.
+difference table, the **populated** agreement table (3 patients × 5 ROIs,
+mean/D95/D2/V20Gy), 4 findings, and a "not yet covered" list (one planning
+system only; no `DoseSummationType BEAM`; no in-the-wild reversed/offset
+`GridFrameOffsetVector`). Data in `scratch/data-dose/Pancreas-CT-CB_{003,
+014,030}/` (gitignored).
 
-**Remaining for the user:** drop a real TCIA case (CT + RTSTRUCT + RTDOSE)
-under the repo-root `scratch/data-dose/<case>/`, run the three scripts, paste
-`compare.mjs` output into `VALIDATION.md`'s agreement table + findings.
+**Still open:** more planning systems (Elekta / RayStation / Pinnacle dose
+needs an NBIA-authenticated TCIA download).
 
 **Scratch relocation (2026-08-28):** the 670 MB `scratch/` tree (dev debug
 `.ts` + `data-real/` TCIA cases used for the rtstruct keyhole scan) moved
@@ -612,9 +617,9 @@ design-time concern.
 - [x] `sample()`, `statistics()`, `calculateDVH()`, `getD()`, `getV()` — 24 tests
 - [x] Resampling, interpolation, partial-volume policy in `DVH-METHOD.md`;
       `method` on every return
-- [~] Agreement table against `dicompyler-core` — harness built + merged
-      (`scripts/validation/` + `VALIDATION.md`), `rtdose-js` side verified on a synthetic
-      triple; real-data table pending a run (TCIA data + `pip install dicompyler-core`)
+- [x] Agreement table against `dicompyler-core` published (`VALIDATION.md`) — 194/195
+      metric comparisons within tolerance, 3 Pancreatic-CT-CBCT-SEG patients × 5 ROIs,
+      dicompyler-core 0.5.6 / pydicom 2.4.5
 - [x] Clinical disclaimer at the top of the README
 - [ ] CI green (Phase D workflow already covers the new package via `--workspaces`)
 - [ ] Published to npm — 0.1.0 (manual, user-run)

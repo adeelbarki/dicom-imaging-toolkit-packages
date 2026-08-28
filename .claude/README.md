@@ -1429,3 +1429,45 @@ the data should sit above both. Updated `tolerance-derivation.ts`'s usage
 docstring to `../../scratch/...`. None of the existing cases carry an
 RTDOSE, so the rtdose PR 3 agreement table still needs dose-bearing
 downloads (suggested home: `scratch/data-dose/<system>-<patient>/`).
+
+### Phase E PR 3 — validation RUN on real data (2026-08-28)
+
+Downloaded real TCIA data and ran the harness. TCIA's public
+(unauthenticated) API exposes RT dose in only two collections
+(`Pancreatic-CT-CBCT-SEG`, `Vestibular-Schwannoma-SEG`) — the usual
+dose-bearing ones (HNSCC, NSCLC-Cetuximab, Head-Neck-PET-CT, ...) are
+NBIA-login gated. Pulled 3 clean planning triples from
+`Pancreatic-CT-CBCT-SEG` into `scratch/data-dose/Pancreas-CT-CB_{003,014,
+030}/` (Varian Eclipse pancreas SBRT). "Clean" = for each patient, resolve
+the planning RTSTRUCT (`BSPC_LL_LR_ROI_SDPC`), follow its
+`ReferencedFrameOfReferenceSequence` -> `RTReferencedSeriesSequence` to the
+exact planning CT series, verify that CT's `FrameOfReferenceUID` == the
+RTDOSE's, download all three. (The collection has 3 CT series + 4 RTSTRUCTs
+per patient — DIBH planning CT + deformably-registered CBCT-day CTs — so
+picking the right CT matters.)
+
+dicompyler-core gotcha: **0.5.6 needs `pydicom<3`** (imports
+`pydicom.dicomio.read_file`, removed in pydicom 3.0). Ran it in
+`/tmp/dvh-venv` (`pydicom 2.4.5` + `dicompyler-core 0.5.6`).
+`metrics-dicompyler.py` and the validation README now say so.
+
+Result: **194 / 195 metric comparisons within tolerance** (3 patients × 5
+ROIs × 13 metrics). mean / D50 / D95 / D2 and every V(d) agree sub-1%
+despite the opposite resampling directions — the histogrammed volume is
+ROI-interior-dominated where the dose is smooth. Structure volumes agree
+to <= 0.2%. The one outlier: `Stomach_duo` / patient 003 `max` dose,
+rtdose-js 65.6 vs dicompyler 63.8 Gy (+2.7%) — a single-voxel extremum at
+the structure edge; rtdose-js samples the dose at the ~3x finer CT-grid
+voxels near the boundary and catches a hotter penumbra voxel.
+`--method nearest` does NOT close it (resampling-direction / sampling-
+density, not interpolation), and `max` dose isn't a DVH criterion (D2 /
+D0.1cc are, and they agree). Documented in `VALIDATION.md` findings 1-2,
+not a defect.
+
+Also confirmed on real Eclipse dose: `DoseGridScaling` (~4.5e-5) applied
+correctly (absolute-dose agreement proves it), `GridFrameOffsetVector`
+ascending-from-0 (no reorder/offset diagnostics fired), `DoseUnits GY`.
+
+VALIDATION.md agreement table + findings populated. `rtdose-js` 0.1.0 exit
+criteria all met except the manual npm publish. Still open for a later
+pass: non-Varian dose (needs NBIA login), `DoseSummationType BEAM`.
