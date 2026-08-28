@@ -1292,6 +1292,12 @@ goes 0.2.0 and every domain package bumps its peer range together.
 154 tests total (90 geometry + 64 rtstruct); typecheck + build clean;
 `resample.{js,d.ts}` in the tarball.
 
+**⚠️ Follow-up missed at the time:** the `packages/geometry/package.json`
+bump to `0.1.1` merged, but `rt-geometry-js` 0.1.1 was never `npm publish`d.
+`rtstruct-js` 0.3.0 (peer `^0.1.0`) is fine, but `rtdose-js` 0.1.0
+(published 2026-08-28, peer `^0.1.1`) now has an unsatisfiable peer on npm
+until `npm publish --workspace rt-geometry-js` is run. Noted in ROADMAP §11.
+
 ## Phase E PR 2 — rtdose-js 0.1.0 (2026-08-28)
 
 Branch `feat/rtdose-js`. `packages/rtdose/` scaffolded on the `rtstruct/`

@@ -12,9 +12,11 @@ DICOM **RTDOSE** reading and dose-volume histograms, built on
 [`rt-geometry-js`](https://www.npmjs.com/package/rt-geometry-js). Part of the
 [DICOM imaging toolkit](https://github.com/adeelbarki/dicom-imaging-toolkit-packages).
 
-**Status:** 0.1.0 — first release. Reads a dose grid, samples it at a point, and answers
-D/V/mean/DVH queries against a structure mask. `rt-geometry-js` `^0.1.1` is a **peer
-dependency** (the resampling primitive landed in 0.1.1).
+**Status:** published — [`rtdose-js`](https://www.npmjs.com/package/rtdose-js) 0.1.0 on npm.
+Reads a dose grid, samples it at a point, and answers D/V/mean/DVH queries against a
+structure mask. Requires the peer dependency
+[`rt-geometry-js`](https://www.npmjs.com/package/rt-geometry-js) (`^0.1.1` — the resampling
+primitive landed in 0.1.1); `npm install rtdose-js rt-geometry-js`.
 
 **Validated against real DICOM files**, not just phantoms — `rtdose-js`'s D2/D50/D95,
 V5Gy/V20Gy/V30Gy, and mean/min/max dose are cross-checked against `dicompyler-core` on real
