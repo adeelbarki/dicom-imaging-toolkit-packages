@@ -1137,3 +1137,40 @@ manual. CI (Phase D). Root `README.md` and `docs/`. `DiagnosticCode`
 widening to `string` is a latent minor break for anyone who did
 `const c: DiagnosticCode = someDiagnostic.code` — note it in the
 `rtstruct-js` 0.3.0 changelog (Phase C).
+
+## Phase B step 4 — DEFAULT_TOLERANCE re-derivation (2026-08-27)
+
+Branch `feat/tolerance-from-real-data`. `rtstruct-js/scripts/validation/tolerance-derivation.ts`
+(new, run with `npx tsx`, imports `src/dicom/port.ts` for DICOM reading —
+so it lives in `rtstruct-js`, not `rt-geometry-js`) walks a folder of
+series subfolders and measures, per series: `PixelSpacing` spread across
+slices, `ImageOrientationPatient` angular spread across slices,
+slice-origin perpendicular deviation from the series normal, slice-spacing
+regularity, and a coordinate read → JS `number` → DS re-encode → re-parse
+round-trip delta (from `_rawValue` DS strings via
+`readDicomDataset`'s `raw` dict).
+
+Run over `scratch/data-real/` (6 series) + `scratch/data-lctsc/ct` (1):
+**every metric came out exactly zero** on all 7 series. Within a real
+series the geometry fields are bit-identical slice to slice; every stack
+is perfectly axial (0 mm off-axis); vendor DS precision tops out at 6
+fractional digits, which survives a JS `number` losslessly. Slice spacing
+1.5 mm (Elekta MR) to 5.0 mm (Varian CT), exactly regular within each
+series.
+
+Outcome: `DEFAULT_TOLERANCE` values **unchanged** (0.5 / 0.01 / 1e-3) —
+the measured floor is zero and nothing real approaches the current values,
+so there's no evidence to move them; they're retained as a deliberate
+margin for the one case this dataset can't isolate (same geometry
+reconstructed by two independent software pipelines). What changed: the
+`tolerance.ts` doc comment (was "reasoned guess, revisit when real data
+available" → now records the measurement and the retained-margin
+rationale) and `VALIDATION.md` (new Finding 6 + the "still open" bullet
+updated). Typecheck + 133 tests still green (doc-comment-only code
+change).
+
+Gotcha worth remembering: an early version of the script inferred DS
+precision from whether the decoded *value* was integral — useless, since
+axial IPP coords and IOP components land on integers regardless of how
+many digits the vendor wrote. Fixed by reading the raw DS strings and
+counting fractional digits / doing an actual re-encode round trip.

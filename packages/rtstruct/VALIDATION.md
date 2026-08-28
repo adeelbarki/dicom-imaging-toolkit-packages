@@ -183,6 +183,32 @@ Across all real patients: lungs in the 1.8–3.0 L range, hearts 550–750 cm³,
 ~40–70 cm³ — all within ranges a planning system would report. An independent sanity
 check against domain knowledge, not just internal consistency.
 
+## Finding 6: DEFAULT_TOLERANCE re-derived — real within-series / round-trip noise is zero
+
+`rt-geometry-js`'s `DEFAULT_TOLERANCE` (`positionMm` 0.5, `spacingMm` 0.01,
+`directionAngleRad` 1e-3) governs two comparisons: `GridGeometry.equals()` and
+`readSeriesGeometry`'s instance-consistency check. `scripts/validation/tolerance-derivation.ts`
+measured the noise those tolerances have to absorb across 7 de-identified series
+(6 from the table above, plus the LCTSC extract), spanning 5+ acquisition origins —
+Elekta MR at 1.5mm, Plastimatch/LCTSC CT at 2–3mm, MIM CT at 3.27mm, Varian CT at 5mm,
+TCIA NSCLC CT at 3mm.
+
+| Axis measured | Worst case across all 7 series |
+|---|---|
+| Per-slice `PixelSpacing` spread within a series | **0** (bit-identical every slice) |
+| Per-slice `ImageOrientationPatient` angular spread | **0** (bit-identical every slice) |
+| Slice-origin deviation off the series normal | **0 mm** (every stack perfectly axial) |
+| Coordinate read → `number` → DS re-encode → re-parse | **0 mm** (vendor DS precision ≤ 6 fractional digits, lossless through a JS `number`) |
+| Slice spacing regularity within a series | exact (min = mean = max), 1.5–5.0 mm |
+
+So the real noise floor for all three fields is **zero** in this dataset, and nothing
+in real multi-vendor data approaches the current values. They are **kept as-is** — a
+deliberate margin for the one case this dataset can't probe: the *same* physical
+geometry reconstructed by two independent pipelines (an RTSTRUCT's referenced-FoR grid
+vs. the CT it was drawn on). The `tolerance.ts` doc comment now records this rather than
+admitting a guess. `positionMm` is the loosest and the first candidate to tighten if a
+paired two-pipeline dataset ever becomes available.
+
 ## Known limitation surfaced during this validation
 
 The rasterizer's hole-fill (`fillPlane()` in `src/contour/rasterize.ts`) merges every
@@ -201,8 +227,10 @@ Not yet fixed; not yet diagnosed. Logged in `.claude/ROADMAP.md`.
   specifically (e.g. RayStation, Pinnacle) — sample is 5 tools, not exhaustive.
 - `CLOSEDPLANAR_XOR` handling remains phantom-tested only; genuinely unconfirmed in the
   wild in this sample.
-- `DEFAULT_TOLERANCE` (`src/geometry/tolerance.ts`) is still a reasoned default, not
-  re-derived from measured multi-vendor position/spacing/orientation noise — this data
-  makes that measurement possible but it has not been done yet.
+- `DEFAULT_TOLERANCE` has now been checked against measured multi-vendor
+  position/spacing/orientation noise (Finding 6) — the floor came out at zero, so the
+  values are unchanged but no longer a pure guess. The residual unknown is cross-pipeline
+  (not cross-vendor) reconstruction of the same geometry, which this dataset can't
+  isolate.
 - This is 7 patients. Interoperability claims here are directional evidence, not a
   statistically powered study.

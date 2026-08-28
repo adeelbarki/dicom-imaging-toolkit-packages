@@ -198,18 +198,29 @@ and `.gitignore` left at root, new private root `package.json`
 and all 120 tests pass unchanged from the new path. Full record in
 `.claude/README.md`.
 
-### Phase B — Extract `rt-geometry-js` 0.1.0 — steps 1-3, 5 ✅ 2026-08-27 (branch `feat/extract-rt-geometry`); steps 4, 6 open
+### Phase B — Extract `rt-geometry-js` 0.1.0 — steps 1-5 ✅ 2026-08-27; step 6 (publish) open
 
-Done in the extraction PR: `packages/geometry` created as `rt-geometry-js` 0.1.0
-(not yet published), the geometry/mask/metrics/phantom/diagnostics code moved
-with `git mv` history intact, `types.ts`/`errors.ts` split geometry-vs-rtstruct,
-`rtstruct-js` rewired to the peer dep with the full geometry surface re-exported
-from its entry point (so Phase C step 2 is already satisfied), tests split across
-the two packages (120 unchanged + 13 new for `ScalarField3D`/histograms = 133,
-all green), typecheck + build clean. Workspace-source resolution via a `paths`
-mapping + a vitest alias; the published build clears the mapping so the emitted
-JS keeps the bare `rt-geometry-js` specifier. **Still open: step 4 (tolerance
-re-derivation) — its own follow-up PR; step 6 (publish) — manual, user-run.**
+Extraction PR (branch `feat/extract-rt-geometry`, merged): `packages/geometry`
+created as `rt-geometry-js` 0.1.0 (not yet published), the
+geometry/mask/metrics/phantom/diagnostics code moved with `git mv` history
+intact, `types.ts`/`errors.ts` split geometry-vs-rtstruct, `rtstruct-js` rewired
+to the peer dep with the full geometry surface re-exported from its entry point
+(so Phase C step 2 is already satisfied), tests split across the two packages
+(120 unchanged + 13 new for `ScalarField3D`/histograms = 133, all green),
+typecheck + build clean. Workspace-source resolution via a `paths` mapping + a
+vitest alias; the published build clears the mapping so the emitted JS keeps the
+bare `rt-geometry-js` specifier.
+
+Tolerance PR (branch `feat/tolerance-from-real-data`) closes **step 4**:
+`scripts/validation/tolerance-derivation.ts` measured within-series
+`PixelSpacing`/`ImageOrientationPatient` spread, slice-origin off-axis deviation,
+and coordinate DS-round-trip error across 7 de-identified series / 5+ acquisition
+origins — **all exactly zero**. `DEFAULT_TOLERANCE` values kept (0.5 / 0.01 /
+1e-3) as a deliberate margin for the one unmeasurable case (same geometry via two
+independent pipelines); the `tolerance.ts` doc comment and `VALIDATION.md`
+Finding 6 now record the evidence instead of admitting a guess.
+
+**Still open: step 6 (publish `rt-geometry-js` 0.1.0) — manual, user-run.**
 
 1. Move geometry, mask, metrics, phantom, diagnostics, provenance, shared
    errors into `packages/geometry/`.
@@ -222,12 +233,15 @@ re-derivation) — its own follow-up PR; step 6 (publish) — manual, user-run.*
    - `packages/geometry` imports no other workspace package
    - no domain package imports another domain package
    - only `packages/convert` may import two domain packages
-4. Re-derive `DEFAULT_TOLERANCE` from the 13 real multi-vendor files
-   already collected (`scratch/` tooling, 5 vendors/tools, see §9).
-   Measure actual IPP variance and orientation drift; set the numbers
-   from evidence; update the doc comment in `src/geometry/tolerance.ts`
-   that currently admits they are a reasoned guess. **Closes v0.1 exit
-   criterion**, same item as under §9's "still open."
+4. ✅ Re-derive `DEFAULT_TOLERANCE` from the real multi-vendor series.
+   Done: `rtstruct-js/scripts/validation/tolerance-derivation.ts` measured
+   IPP off-axis variance, orientation drift, `PixelSpacing` spread, and
+   coordinate DS-round-trip error across 7 series / 5+ acquisition origins
+   — all exactly zero. Values kept (evidence shows the floor is far below
+   them and nothing real approaches them); doc comment in
+   `rt-geometry-js/src/tolerance.ts` and `VALIDATION.md` Finding 6 now
+   carry the evidence. **Closed v0.1 exit criterion**, same item as under
+   §9's "still open."
 5. `ScalarField3D` and the histogram functions may be stubbed here and
    filled in during Phase E, or built now — either is fine, but the
    *types* should exist before `rtstruct-js` 0.3.0 publishes so the
@@ -474,12 +488,13 @@ design-time concern.
 ## 11. Exit criteria
 
 ### `rt-geometry-js` 0.1.0
-- [ ] All migrated tests green
-- [ ] Rewritten dependency-rule script enforcing package boundaries
-- [ ] `DEFAULT_TOLERANCE` derived from real multi-vendor data
-- [ ] `ScalarField3D` and histogram types present (implementation may
-      follow in Phase E)
-- [ ] No DICOM, network, or filesystem dependency
+- [x] All migrated tests green (80 geometry + 53 rtstruct = 133)
+- [x] Rewritten dependency-rule script enforcing package boundaries
+- [x] `DEFAULT_TOLERANCE` checked against real multi-vendor data (noise
+      floor measured at zero across 7 series; values kept, now evidenced)
+- [x] `ScalarField3D` and histogram present (built, not stubbed)
+- [x] No DICOM, network, or filesystem dependency
+- [ ] Published to npm (step 6 — manual)
 
 ### `rtstruct-js` 0.3.0
 - [ ] Zero breaking changes; geometry types re-exported

@@ -19,9 +19,21 @@ import type { GridTolerance } from "./types.js";
  *   `rowDirection`/`columnDirection` between two instances — angle, not a linear delta,
  *   per GEO-05.
  *
- * These are initial values, not yet re-derived from real multi-vendor DICOM (no vendor
- * files exist in this repo — see the phantom-only correctness philosophy in the README).
- * Revisit once real interoperability testing across vendors is possible.
+ * Re-derived against real data (2026-08, roadmap v2 Phase B step 4;
+ * `rtstruct-js/scripts/validation/tolerance-derivation.ts`, findings in
+ * `rtstruct-js/VALIDATION.md`). Across 7 de-identified series from 5+ acquisition
+ * origins (Elekta MR 1.5mm, Plastimatch/LCTSC CT 2-3mm, MIM CT 3.27mm, Varian CT 5mm,
+ * TCIA NSCLC CT 3mm), the measured noise these tolerances must absorb was **exactly
+ * zero** on every axis: per-slice `PixelSpacing` and `ImageOrientationPatient` are
+ * bit-identical within each series, every series' slice origins sit perfectly on the
+ * normal (0mm off-axis), and a read -> `number` -> DS re-encode -> re-parse round trip
+ * shifts no coordinate (vendor DS precision tops out at 6 fractional digits, lossless
+ * through a JS `number`). So the values below are far above the real noise floor and
+ * nothing in real multi-vendor data comes close to them. They are kept as-is: a
+ * deliberate margin for the one case this dataset can't probe — the same physical
+ * geometry reconstructed by two independent software pipelines (e.g. an RTSTRUCT's
+ * referenced-FoR grid vs. the CT it was drawn on). Revisit if such a paired dataset
+ * appears; `positionMm` is the loosest and the first candidate to tighten.
  */
 export const DEFAULT_TOLERANCE: GridTolerance = {
   positionMm: 0.5,
