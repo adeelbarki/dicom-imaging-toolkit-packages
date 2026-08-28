@@ -1368,3 +1368,52 @@ geometry + 64 rtstruct + 24 rtdose = 178 tests green, build clean, bare
 Not published (manual, user-run, after CI). PR 3 = validation vs
 `dicompyler-core` on real TCIA RTDOSE+RTSTRUCT pairs — needs data + Python,
 may lag.
+
+## Phase E PR 3 — rtdose-js validation harness (2026-08-28)
+
+Branch `feat/rtdose-validation`. Harness only — the agreement table on
+real data needs TCIA RTDOSE+RTSTRUCT pairs and `pip install
+dicompyler-core`, neither in the dev environment. Built and smoke-tested
+so the user can run it and paste results.
+
+`packages/rtdose/scripts/validation/`:
+- `metrics-rtdose-js.ts` — folder (1 RTDOSE + 1 RTSTRUCT + its CT/MR
+  series) -> per-ROI JSON `{ volumeCm3, meanGy/minGy/maxGy, dGy:
+  D2/D50/D95, vCm3/vPct: V5Gy/V20Gy/V30Gy }`. `--method
+  trilinear|nearest`, `--out`. Classifies files via dcmjs
+  (`StructureSetROISequence` / `Modality==RTDOSE` / `Rows`+`PixelData`),
+  `readSeriesGeometry` for the grid, `RTStruct.load` for masks,
+  `DoseGrid` for the metrics.
+- `metrics-dicompyler.py` — same folder + metric shape via
+  `dvhcalc.get_dvh` defaults + `.statistic("D95")` / `.statistic("V20Gy")`
+  / `.relative_volume.statistic(...)`. `pip install dicompyler-core
+  pydicom`, tested target >= 0.5.5.
+- `compare.mjs` — joins by trimmed lowercase ROI name, Markdown table with
+  Δ (rtdose-js − dicompyler-core) + Δ%, flags dose Δ > max(0.5 Gy, 2%) /
+  vol Δ > max(1 cm³, 2%) / V% Δ > 2 pp. Always exits 0 (report).
+- `README.md` — run order + the expected disagreement.
+
+`rtstruct-js` added to `rtdose-js` **devDependencies** for the TS script.
+Dev-only, never in `src/`, so `check-dependency-rule.mjs` (scans `src/`
+imports) does not see it and the "domains don't depend on each other" rule
+is intact; `files: ["dist", ...]` keeps it out of the tarball. `npx tsx`
+resolves it via the workspace symlink; needs a repo-root `npm run build`
+first (same assumption as rtstruct's own validation scripts re:
+`rt-geometry-js` dist).
+
+`packages/rtdose/VALIDATION.md` — method, the resampling-direction
+difference table (rtdose-js: dose->structure grid, trilinear;
+dicompyler-core: structure->dose grid, nearest plane — the expected source
+of most disagreement, worst on small structures / steep gradients), data +
+agreement-table placeholders, a Status box. Not in `files` (in-repo only,
+same as rtstruct's VALIDATION.md).
+
+Smoke test: built a synthetic CT (10x 20x20 @2mm) + RTSTRUCT (one box ROI,
+planes z=4..14, 10x10mm) + RTDOSE (12x12x8 @2mm, dose = 0.5 Gy/mm of z)
+triple and ran `metrics-rtdose-js.ts` — voxelCount 150, volume 1.2 cm³,
+mean 4.5 Gy, min 2 / max 7, D2 7 / D50 5 / D95 2, V5Gy 50% / V20Gy 0, all
+matching the hand calculation. The `rtdose-js` half of the harness is
+therefore proven; only the `dicompyler-core` cross-check is outstanding.
+
+Full gate unchanged (178 tests: 90 + 64 + 24); typecheck + build clean.
+Nothing published.

@@ -305,7 +305,7 @@ full test suite including the round-trip gate
 
 **Closed the second outstanding v0.1 exit criterion.**
 
-### Phase E — `rtdose-js` 0.1.0 — PR 1 + PR 2 ✅ (2026-08-28); PR 3 (validation) open
+### Phase E — `rtdose-js` 0.1.0 — PR 1 + PR 2 ✅ (2026-08-28); PR 3 harness ✅, real-data agreement table pending
 
 Builds `ScalarField3D`, resampling, and histograms for real.
 
@@ -356,8 +356,36 @@ quantity is computed. 24 tests (PARSE-01..11, DG-01..07, DVH-01..06). Typecheck
 `check-dependency-rule.mjs` auto-discovered the package, no script change
 needed. **Not yet published** (manual, user-run, after CI).
 
-**PR 3 (next) — validation** vs `dicompyler-core` on real TCIA RTDOSE+RTSTRUCT pairs
-(§9). Needs data + a Python env; may lag PR 2.
+**PR 3 ⏳ — validation** vs `dicompyler-core` (branch `feat/rtdose-validation`).
+Harness **built and merged**; the agreement table on real data is still
+pending a run (needs TCIA RTDOSE+RTSTRUCT pairs + `pip install
+dicompyler-core`, neither in the dev environment).
+
+`packages/rtdose/scripts/validation/`:
+- `metrics-rtdose-js.ts` — folder (1 RTDOSE + 1 RTSTRUCT + its CT series) ->
+  per-ROI `{ volumeCm3, meanGy/minGy/maxGy, dGy: D2/D50/D95, vCm3/vPct:
+  V5Gy/V20Gy/V30Gy }` JSON. `--method trilinear|nearest`. Uses `rtstruct-js`
+  (added as a **devDependency** — dev-only, not in `src/`, invisible to
+  `check-dependency-rule.mjs` which scans `src/` imports only, never ships).
+- `metrics-dicompyler.py` — same folder + same metric shape via
+  `dvhcalc.get_dvh` defaults. `pip install dicompyler-core pydicom`.
+- `compare.mjs` — joins by ROI name, prints a Markdown Δ / Δ% table, flags
+  dose Δ > max(0.5 Gy, 2%) / vol Δ > max(1 cm³, 2%) / V% Δ > 2 pp. Report,
+  not a gate.
+- `README.md` — run sequence + the expected disagreement (the two tools
+  resample in opposite directions: rtdose-js dose->structure grid
+  trilinear, dicompyler-core structure->dose grid nearest-plane).
+
+`packages/rtdose/VALIDATION.md` — method, the resampling-direction
+difference table, data-sources + agreement-table placeholders, a Status
+box. The `rtdose-js` side is verified end-to-end on a **synthetic**
+CT+RTSTRUCT+RTDOSE triple (box ROI on a linear dose ramp — every metric
+matched the hand calculation); only the `dicompyler-core` cross-check
+awaits data.
+
+**Remaining for the user:** drop a real TCIA folder in `scratch/`, run the
+three scripts, paste `compare.mjs` output into `VALIDATION.md`'s agreement
+table + findings.
 
 ### Phase F — `dicom-seg-js` 0.1.0
 
@@ -575,7 +603,9 @@ design-time concern.
 - [x] `sample()`, `statistics()`, `calculateDVH()`, `getD()`, `getV()` — 24 tests
 - [x] Resampling, interpolation, partial-volume policy in `DVH-METHOD.md`;
       `method` on every return
-- [ ] Agreement table against `dicompyler-core` published (PR 3 — needs TCIA data + Python)
+- [~] Agreement table against `dicompyler-core` — harness built + merged
+      (`scripts/validation/` + `VALIDATION.md`), `rtdose-js` side verified on a synthetic
+      triple; real-data table pending a run (TCIA data + `pip install dicompyler-core`)
 - [x] Clinical disclaimer at the top of the README
 - [ ] CI green (Phase D workflow already covers the new package via `--workspaces`)
 - [ ] Published to npm — 0.1.0 (manual, user-run)
