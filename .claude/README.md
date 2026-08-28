@@ -1292,6 +1292,14 @@ goes 0.2.0 and every domain package bumps its peer range together.
 154 tests total (90 geometry + 64 rtstruct); typecheck + build clean;
 `resample.{js,d.ts}` in the tarball.
 
+**Publish-order lesson:** the `packages/geometry/package.json` bump to
+`0.1.1` merged in PR 1 but the `npm publish` was skipped, so for a few
+minutes after `rtdose-js` 0.1.0 went out (peer `^0.1.1`) npm only had
+`rt-geometry-js` 0.1.0 → unsatisfiable peer. Caught by checking the
+registry right after publish; `rt-geometry-js` 0.1.1 published 2026-08-28
+23:53Z, chain now whole. Takeaway: when a domain package bumps its peer
+range, publish the core **first**, then the domain package.
+
 ## Phase E PR 2 — rtdose-js 0.1.0 (2026-08-28)
 
 Branch `feat/rtdose-js`. `packages/rtdose/` scaffolded on the `rtstruct/`
