@@ -11,8 +11,16 @@ nothing here is example code.
 - A folder with **one RTDOSE**, **one RTSTRUCT**, and the **CT/MR series** the RTSTRUCT was
   drawn on (all `.dcm`, flat in one directory). `rtdose-js` rasterizes the RTSTRUCT onto
   the CT grid; `dicompyler-core` only needs the RTDOSE + RTSTRUCT.
-- No DICOM files live in this repo. Put them somewhere gitignored (`scratch/`) or outside
-  the tree.
+- No DICOM files live in this repo. They go in the **repo-root `scratch/`** directory
+  (gitignored, shared by every package). Suggested layout — one subfolder per case:
+
+  ```
+  scratch/data-dose/<PlanningSystem>-<PatientID>/
+      CT-00000001.dcm ...      the planning CT series
+      RS.dcm                    RTSTRUCT
+      RD.dcm                    RTDOSE
+  ```
+
 - A repo-root `npm install` **and `npm run build`** — the TS script resolves
   `rt-geometry-js` and `rtstruct-js` from their built `dist/` via the workspace symlinks.
 - Python with `pip install dicompyler-core pydicom` (tested against dicompyler-core
@@ -21,14 +29,16 @@ nothing here is example code.
 ## Run
 
 ```sh
-# from packages/rtdose/
-npx tsx scripts/validation/metrics-rtdose-js.ts   <folder> --method trilinear
-npx tsx scripts/validation/metrics-rtdose-js.ts   <folder> --method nearest      # optional, for the method-difference column
-python3   scripts/validation/metrics-dicompyler.py <folder>
+# from packages/rtdose/ — CASE is a folder under the repo-root scratch/ dir
+CASE=../../scratch/data-dose/<PlanningSystem>-<PatientID>
+
+npx tsx scripts/validation/metrics-rtdose-js.ts   "$CASE" --method trilinear
+npx tsx scripts/validation/metrics-rtdose-js.ts   "$CASE" --method nearest      # optional, for the method-difference column
+python3   scripts/validation/metrics-dicompyler.py "$CASE"
 
 node scripts/validation/compare.mjs \
-  <folder>/dvh-rtdose-js.trilinear.json \
-  <folder>/dvh-dicompyler-core.json
+  "$CASE"/dvh-rtdose-js.trilinear.json \
+  "$CASE"/dvh-dicompyler-core.json
 ```
 
 Each `metrics-*` script writes a JSON report (`volumeCm3`, `meanGy`/`minGy`/`maxGy`,

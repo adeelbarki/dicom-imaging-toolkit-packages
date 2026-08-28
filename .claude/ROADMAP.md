@@ -383,9 +383,18 @@ CT+RTSTRUCT+RTDOSE triple (box ROI on a linear dose ramp — every metric
 matched the hand calculation); only the `dicompyler-core` cross-check
 awaits data.
 
-**Remaining for the user:** drop a real TCIA folder in `scratch/`, run the
-three scripts, paste `compare.mjs` output into `VALIDATION.md`'s agreement
-table + findings.
+**Remaining for the user:** drop a real TCIA case (CT + RTSTRUCT + RTDOSE)
+under the repo-root `scratch/data-dose/<case>/`, run the three scripts, paste
+`compare.mjs` output into `VALIDATION.md`'s agreement table + findings.
+
+**Scratch relocation (2026-08-28):** the 670 MB `scratch/` tree (dev debug
+`.ts` + `data-real/` TCIA cases used for the rtstruct keyhole scan) moved
+from `packages/rtstruct/scratch/` to the **repo root** `scratch/` so every
+package shares it. Still gitignored (`.gitignore` `scratch/` matches at any
+depth). `tolerance-derivation.ts`'s usage docstring updated to the new
+`../../scratch/...` relative path. The existing `data-real/` cases are
+CT/MR + RTSTRUCT only — **no RTDOSE**, so PR 3's agreement table needs a
+fresh download of dose-bearing cases.
 
 ### Phase F — `dicom-seg-js` 0.1.0
 

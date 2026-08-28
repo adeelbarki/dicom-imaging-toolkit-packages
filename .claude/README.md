@@ -1417,3 +1417,15 @@ therefore proven; only the `dicompyler-core` cross-check is outstanding.
 
 Full gate unchanged (178 tests: 90 + 64 + 24); typecheck + build clean.
 Nothing published.
+
+### Scratch relocation (2026-08-28, on feat/rtdose-validation)
+
+Moved `packages/rtstruct/scratch/` -> repo-root `scratch/` (670 MB: dev
+debug `.ts`, `data/`, `data-lctsc/`, `data-real/` — the 6 TCIA CT/MR +
+RTSTRUCT cases behind rtstruct's keyhole scan). Plain `mv` (never tracked;
+`.gitignore` `scratch/` matches at any depth, still ignored at root).
+Rationale: the monorepo now has two packages with validation harnesses;
+the data should sit above both. Updated `tolerance-derivation.ts`'s usage
+docstring to `../../scratch/...`. None of the existing cases carry an
+RTDOSE, so the rtdose PR 3 agreement table still needs dose-bearing
+downloads (suggested home: `scratch/data-dose/<system>-<patient>/`).
