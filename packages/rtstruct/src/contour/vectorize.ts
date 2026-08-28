@@ -128,6 +128,21 @@ function linkLoops(edges: readonly HalfEdge[]): Point2D[][] {
 /**
  * mask -> contours. Never the inverse gate — see IMPLEMENTATION_PLAN.md Phase 4.
  *
+ * Output ordering and winding are a **stable contract**, not an implementation accident
+ * (locked by VECTOR-ORDER-* in vectorize.test.ts):
+ *
+ * - Contours come out in ascending `planeIndex`; within a plane, in the order
+ *   `boundaryEdges` discovers loop-start edges — a row-major (row then column) scan of
+ *   filled cells, top edge of the first filled cell first.
+ * - Each contour's first point is the start vertex of that first-discovered edge.
+ * - Every loop winds **clockwise in (column, row) screen space** (x right, y *down*):
+ *   top edge left-to-right, right edge top-to-bottom, etc. A hole's boundary therefore
+ *   winds counter-clockwise. Even-odd rasterization doesn't depend on winding, but a
+ *   consumer computing signed area or normals can rely on this.
+ * - Loop vertices sit on the half-integer lattice (cell borders), so
+ *   `rasterize(vectorize(mask))` reproduces `mask` exactly for any shape without
+ *   sub-voxel curvature — not merely within a Dice threshold.
+ *
  * Bounds voxel count BEFORE building any boundary/loop data structure — see SEC-01. This
  * matters here specifically because a mask built via maskFromDense (rather than
  * createEmptyMask) never passed through that function's own maxVoxels check, and a

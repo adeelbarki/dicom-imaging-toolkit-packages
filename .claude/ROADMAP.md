@@ -250,24 +250,43 @@ release in Phase C).
    geometry API doesn't churn immediately after release.
 6. Publish.
 
-### Phase C — `rtstruct-js` 0.3.0
+### Phase C — `rtstruct-js` 0.3.0 — steps 1-5 ✅ 2026-08-27 (branch `feat/rtstruct-0.3.0`); step 6 (publish) open
 
-Must break nobody.
+Must break nobody. Done in this PR:
 
-1. Add the peer dependency.
-2. **Re-export every geometry type from the public entry point** so
-   existing imports resolve unchanged.
-3. Re-run the full real-file validation set — same 13 files, same
-   expected results — confirming the extraction changed no behaviour.
-4. Consider renaming `RTStructImpl` → `RTStruct` here, keeping the old
-   name as a deprecated alias. A major reshuffle is the natural moment.
-5. Fold in the `rtstruct-js`-specific correctness/robustness gaps carried
-   forward in §12 (finite-coordinate check, vectorizer ordering contract,
-   exact round-trip test, holes-test tightening, topology fixture
-   matrix, and — if there's room — the CLI `validate` command). None of
-   these block the geometry extraction; they're opportunistic additions
-   to the same release.
-6. Publish.
+1. ✅ Peer dependency — added in Phase B (`peerDependencies` + `devDependencies`
+   `rt-geometry-js: ^0.1.0`).
+2. ✅ Re-export every geometry type — done in Phase B (`export * from
+   "rt-geometry-js"` in `src/index.ts`).
+3. ✅ Real-file round-trip re-run on 3 of 7 patients (Elekta MR, TCIA NSCLC CT,
+   Varian CT — every ROI): Dice `1.000000`, voxel disagreement `0`, point-count
+   ratios unchanged. `VALIDATION.md` "Re-run history" note + `CHANGELOG` record.
+   (The 3 large-mask patients — LCTSC-S3, MIM — were left for a follow-up; the 3
+   run span both modalities + 3 tools and reproduce every finding.)
+4. ✅ Already done — `RTStructImpl` deprecated alias has existed since 0.2.0.
+5. ✅ §12 gaps folded in:
+   - **finite-coordinate check** — `rasterize()` throws `MalformedContourError`
+     on a NaN/Infinity point coordinate (was: silent).
+   - **vectorizer ordering/winding contract** — documented on `vectorize()` and
+     locked by `VECTOR-ORDER-01..03` (plane-ascending → row-major discovery
+     order; clockwise winding in screen space; hole boundaries wind the other
+     way).
+   - **exact round-trip test** — new `topology.test.ts`, `voxelDisagreement()
+     === 0` for single voxel, rectangle, disconnected islands, island-in-a-hole,
+     checkerboard, one-voxel-wide, border-flush (TOPO-01..07).
+   - **holes-test tightening** — CTR-02/03 now `voxelDisagreement() === 0`, not
+     `mask.count()`.
+   - **topology fixture matrix** — the 7 TOPO cases above.
+   - **CLI `validate`** — *deferred*. It's the one item marked "if there's room"
+     and it still needs the geometry-less-vs-companion-series decision (§12).
+     Own follow-up.
+   Plus: `Diagnostic.code` widened to `string` (see §12 / CHANGELOG — type-level,
+   non-breaking at runtime), version bump 0.2.1 → 0.3.0, `CHANGELOG.md` shipped
+   in the tarball, README status/install updated for the peer dep.
+
+6. Publish `rtstruct-js` 0.3.0 — **open, manual, user-run** (after CI merges).
+
+Test count: 80 geometry + 64 rtstruct = 144, all green. Typecheck + build clean.
 
 ### Phase D — CI
 
@@ -499,10 +518,12 @@ design-time concern.
 - [x] Published to npm — `rt-geometry-js` 0.1.0 (2026-08-27)
 
 ### `rtstruct-js` 0.3.0
-- [ ] Zero breaking changes; geometry types re-exported
-- [ ] Peer dependency declared with a stated range
-- [ ] Real-file validation re-run, results unchanged
-- [ ] CI green on every push
+- [x] Zero breaking changes; geometry types re-exported (runtime; `Diagnostic.code`
+      widened to `string` is a type-only change, changelogged)
+- [x] Peer dependency declared with a stated range (`rt-geometry-js` `^0.1.0`)
+- [x] Real-file validation re-run, results unchanged (3 of 7 patients, every ROI)
+- [ ] CI green on every push (Phase D — `feat/ci`, not yet merged)
+- [ ] Published to npm — 0.3.0 (step 6, manual)
 
 ### `rtdose-js` 0.1.0
 - [ ] `DoseGrid` parse with `DoseGridScaling` applied

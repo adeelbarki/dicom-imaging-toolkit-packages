@@ -8,12 +8,15 @@ carry no ground truth anyway).
 
 **Handles all three hole encodings the same way.** Nested `CLOSED_PLANAR`
 contours, `CLOSEDPLANAR_XOR`, and a single self-touching keyhole contour all
-rasterize to an identical mask — asserted directly, contour-count-for-count,
-in [`tests/unit/holes.test.ts`](tests/unit/holes.test.ts). Round-trip volume
-fidelity is verified separately, against a torus phantom's closed-form volume.
+rasterize to an identical mask — asserted voxel-for-voxel
+(`voxelDisagreement() === 0`) in [`tests/unit/holes.test.ts`](tests/unit/holes.test.ts).
+Round-trip volume fidelity is verified separately, against a torus phantom's
+closed-form volume.
 
 **Status:** published — [`rtstruct-js`](https://www.npmjs.com/package/rtstruct-js)
-on npm, v0.2, 120 tests green.
+on npm, v0.3.0. Requires the peer dependency
+[`rt-geometry-js`](https://www.npmjs.com/package/rt-geometry-js) (`^0.1.0`);
+`npm install rtstruct-js rt-geometry-js`. 144 tests green across both packages.
 
 **Validated against real DICOM files**, not just phantoms — 5 vendors/tools, real
 keyhole/nested contour distributions, real round-trip fidelity. See
@@ -44,13 +47,20 @@ What this library does *not* do yet — read this before adopting:
 
 ## Install
 
+`rt-geometry-js` is a **peer dependency** (the shared geometry core), so install both:
+
 ```sh
-npm install rtstruct-js
+npm install rtstruct-js rt-geometry-js
 ```
 
 ```ts
+// geometry types/functions are re-exported from rtstruct-js — a single import still works
 import { RTStruct, createUniformGrid, spherePhantom } from "rtstruct-js";
 ```
+
+The peer dependency is declared rather than bundled so that `rtstruct-js`, and later
+`rtdose-js` / `dicom-seg-js`, all share one `GridGeometry` / `Mask3D` implementation
+instead of npm quietly installing two copies that disagree.
 
 `RTStructImpl` is still exported as a deprecated alias of `RTStruct` (same class,
 identical behavior) for anyone who adopted the name from v0.1 — it will be removed
