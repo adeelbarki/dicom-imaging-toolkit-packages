@@ -1291,3 +1291,80 @@ goes 0.2.0 and every domain package bumps its peer range together.
 
 154 tests total (90 geometry + 64 rtstruct); typecheck + build clean;
 `resample.{js,d.ts}` in the tarball.
+
+## Phase E PR 2 — rtdose-js 0.1.0 (2026-08-28)
+
+Branch `feat/rtdose-js`. `packages/rtdose/` scaffolded on the `rtstruct/`
+pattern: peer dep `rt-geometry-js ^0.1.1` + matching devDep; `paths` alias
+to `../geometry/src/index.ts` for typecheck/tests with `paths: {}` in
+`tsconfig.build.json`; vitest `resolve.alias`; `dcmjs ^0.52.0` the only
+runtime dep, imported once via `createRequire` in `src/dicom/port.ts`.
+`check-dependency-rule.mjs` discovered the package with no change (it reads
+`packages/*/package.json` names).
+
+`src/dicom/port.ts`:
+- `readRTDose(bytes)` — naturalize via dcmjs, then:
+  - `SOPClassUID` not RT Dose Storage AND `Modality` != "RTDOSE" ->
+    `NotRTDoseError`.
+  - Type 1 checks on Rows/Columns/PixelSpacing(2)/IOP(6)/IPP(3); multi-frame
+    requires `GridFrameOffsetVector` with length == `NumberOfFrames` ->
+    `MalformedDoseGridError` otherwise.
+  - `PixelData` decoded from `nat.PixelData[0]` (ArrayBuffer) as
+    Uint16/Int16/Uint32/Int32 per BitsAllocated + PixelRepresentation;
+    little-endian assumed (every uncompressed RTDOSE transfer syntax is LE,
+    every host is LE). Length short of `frames*rows*cols` ->
+    `MalformedDoseGridError`.
+  - frame plane position = `IPP + offset_f * normal`; frames sorted
+    ascending by `offset_f` and the value buffer reordered to match
+    (`createGridGeometry` would sort the positions anyway). Diagnostics:
+    `DOSE_FRAMES_REORDERED`, `GRID_FRAME_OFFSET_NONZERO_ORIGIN`,
+    `MISSING_DOSE_GRID_SCALING` (factor 1.0), `DOSE_UNITS_NOT_GY`,
+    `SINGLE_FRAME_DOSE_GRID`.
+  - `doseValues: Float32Array` scaled by `DoseGridScaling`, in
+    `ScalarField3D` layout.
+- `writeRTDose(opts)` — fixture builder (BUILT, not checked in). Handles
+  16/32-bit, `frameOffsets`, and test knobs
+  (`truncatePixelDataBytesTo`, `omitGridFrameOffsetVector`, `sopClassUID`).
+  Sets `dict["7FE00010"] = { vr: "OW", Value: [buf] }` to stop dcmjs
+  warning about the context-dependent "ox" VR. Not re-exported from
+  `index.ts` (same rule as `writeRTStruct`).
+
+`src/dose-grid.ts` — `DoseGrid` class:
+- `fromDicom(bytes)` / `fromParsed(parse)`; exposes `geometry`, `field`
+  (`ScalarField3D`), `units`, `doseType`, `doseSummationType`,
+  `doseGridScaling`, `frameOfReferenceUID`, `diagnostics`.
+- `sample(point, {method})` -> `sampleFieldAt(this.field, ...)`, `outOfBounds: 0`.
+- private `fieldOn(target, method)`: `this.geometry.equals(target)` ->
+  `{ field: this.field, resampled: false }`; else memoised
+  `resampleField` in `WeakMap<GridGeometry, Map<InterpMethod,
+  ScalarField3D>>` -> `{ field, resampled: true }`. FoR mismatch
+  propagates `FrameOfReferenceMismatchError` from `resampleField`.
+- private `samplesOver(mask, method)` — one pass over occupied voxels
+  collecting `(value, voxelVolumeMm3)` with `areaMm2 *
+  mask.geometry.planeThicknessMm(k)` (so the mask, not the dose grid,
+  supplies slice thickness — single-frame dose still works if the mask has
+  >= 2 planes).
+- `statistics` (min/max/volume-weighted mean), `calculateDVH` (geometry
+  `histogram` with `min:0`, suffix-summed to a non-increasing cumulative
+  curve of `bins+1` points), `getD` -> `valueAtVolumeFraction`, `getV` ->
+  `volumeAboveThreshold` + fraction from `mask.volume({method:"voxel"})`.
+- `method` on every return:
+  `{ resampling: "dose-sampled-at-structure-voxel-centres", interpolation,
+  volumePolicy: "whole-voxel-binary", resampledToMaskGrid }`.
+
+`README.md` — "not a TPS / not clinically validated" block at the very top.
+`docs/DVH-METHOD.md` — the three §6 choices + how each derived quantity is
+computed. `CHANGELOG.md` `[0.1.0]`.
+
+24 tests: PARSE-01..11 (dims/scaling, plane placement, frame reorder,
+missing scaling, non-Gy units, short PixelData, non-RTDOSE, 32-bit, missing
+GFOV, single-frame, non-zero offset origin), DG-01..07 (sample exact /
+OOB / nearest, statistics coincident-grid + resample path + FoR mismatch +
+empty), DVH-01..06 (uniform-dose D/V/method, cumulative shape, monotone
+ramp D50/V50/mean, bad bins). Full monorepo gate: typecheck clean, 90
+geometry + 64 rtstruct + 24 rtdose = 178 tests green, build clean, bare
+`rt-geometry-js` specifier in `dist/`.
+
+Not published (manual, user-run, after CI). PR 3 = validation vs
+`dicompyler-core` on real TCIA RTDOSE+RTSTRUCT pairs — needs data + Python,
+may lag.

@@ -305,7 +305,7 @@ full test suite including the round-trip gate
 
 **Closed the second outstanding v0.1 exit criterion.**
 
-### Phase E — `rtdose-js` 0.1.0 — in progress
+### Phase E — `rtdose-js` 0.1.0 — PR 1 + PR 2 ✅ (2026-08-28); PR 3 (validation) open
 
 Builds `ScalarField3D`, resampling, and histograms for real.
 
@@ -324,22 +324,39 @@ no change; `rtdose-js` will require `^0.1.1`. The DVH functions
 (`histogram`/`volumeAboveThreshold`/`valueAtVolumeFraction`) already exist from
 Phase B.
 
-**PR 2 (next) — `packages/rtdose/` `rtdose-js` 0.1.0:**
+**PR 2 ✅ — `packages/rtdose/` `rtdose-js` 0.1.0 (branch `feat/rtdose-js`):**
+`packages/rtdose/` scaffolded on the same pattern as `rtstruct/` (peer dep
+`rt-geometry-js ^0.1.1`; `paths` alias for dev/test, `paths: {}` in
+`tsconfig.build.json`; vitest `resolve.alias`; `dcmjs` the only runtime dep,
+imported through `createRequire` in the single `src/dicom/port.ts`).
 
 ```
-DoseGrid                    RTDOSE parse, DoseGridScaling applied
-dose.sample(patientPoint)   interpolated dose at a physical point
-dose.statistics(mask)       min / max / mean
-dose.calculateDVH(mask)     cumulative DVH
-dose.getD(percent, mask)    D95, D50, D2
-dose.getV(gy, mask)         V5, V20, V30
+DoseGrid.fromDicom(bytes)   RTDOSE parse, DoseGridScaling applied, GridFrameOffsetVector
+                            -> plane positions along the normal; frames sorted if needed;
+                            NotRTDoseError / MalformedDoseGridError; soft issues -> diagnostics
+dose.sample(point, {method}) interpolated dose at a physical point (0 outside the grid)
+dose.statistics(mask)       min / max / volume-weighted mean
+dose.calculateDVH(mask,{bins}) cumulative DVH (points non-increasing in volume)
+dose.getD(percent, mask)    Dx%  = valueAtVolumeFraction(field, mask, percent/100)
+dose.getV(doseGy, mask)     V(d) = volumeAboveThreshold(field, mask, doseGy), abs + fraction
+readRTDose(bytes)           standalone parse (counterpart of readSeriesGeometry)
 ```
 
-Internally: resample the dose field onto `mask.geometry` (trilinear) once per
-grid, then the Phase B DVH functions. Clinical disclaimer at the top of the
-README, `method` on every return, `docs/DVH-METHOD.md`.
+Every mask query calls a private `fieldOn(mask.geometry, method)` that returns
+`this.field` when the grids already coincide, else a `resampleField` memoised
+in a `WeakMap<GridGeometry, Map<InterpMethod, ScalarField3D>>` — one resample
+per ROI, not per query — then the Phase B histogram functions. Every return
+carries `method` = `{ resampling: "dose-sampled-at-structure-voxel-centres",
+interpolation, volumePolicy: "whole-voxel-binary", resampledToMaskGrid }`.
+`FrameOfReferenceMismatchError` propagates from `resampleField` on a FoR
+mismatch. Clinical "not a TPS / not validated" disclaimer at the top of the
+README; `docs/DVH-METHOD.md` records the three §6 choices and how each derived
+quantity is computed. 24 tests (PARSE-01..11, DG-01..07, DVH-01..06). Typecheck
++ build clean; bare `rt-geometry-js` specifier preserved in `dist/`.
+`check-dependency-rule.mjs` auto-discovered the package, no script change
+needed. **Not yet published** (manual, user-run, after CI).
 
-**PR 3 — validation** vs `dicompyler-core` on real TCIA RTDOSE+RTSTRUCT pairs
+**PR 3 (next) — validation** vs `dicompyler-core` on real TCIA RTDOSE+RTSTRUCT pairs
 (§9). Needs data + a Python env; may lag PR 2.
 
 ### Phase F — `dicom-seg-js` 0.1.0
@@ -553,11 +570,15 @@ design-time concern.
 - [ ] Published to npm — 0.3.0 (step 6, manual)
 
 ### `rtdose-js` 0.1.0
-- [ ] `DoseGrid` parse with `DoseGridScaling` applied
-- [ ] `sample()`, `statistics()`, `calculateDVH()`, `getD()`, `getV()`
-- [ ] Resampling, interpolation, partial-volume policy in `DVH-METHOD.md`
-- [ ] Agreement table against `dicompyler-core` published
-- [ ] Clinical disclaimer at the top of the README
+- [x] `DoseGrid` parse with `DoseGridScaling` applied (+ `GridFrameOffsetVector`,
+      16/32-bit pixel data, `NotRTDoseError`/`MalformedDoseGridError`, soft diagnostics)
+- [x] `sample()`, `statistics()`, `calculateDVH()`, `getD()`, `getV()` — 24 tests
+- [x] Resampling, interpolation, partial-volume policy in `DVH-METHOD.md`;
+      `method` on every return
+- [ ] Agreement table against `dicompyler-core` published (PR 3 — needs TCIA data + Python)
+- [x] Clinical disclaimer at the top of the README
+- [ ] CI green (Phase D workflow already covers the new package via `--workspaces`)
+- [ ] Published to npm — 0.1.0 (manual, user-run)
 
 ### `dicom-seg-js` 0.1.0
 - [ ] BINARY, FRACTIONAL, LABELMAP read
