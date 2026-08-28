@@ -1,6 +1,6 @@
-import { add, dot, length, scale, sub } from "../geometry/vec3.js";
-import { checkVoxelBudget, DEFAULT_MAX_VOXELS, maskFromDense } from "../mask/mask3d.js";
-import type { GridGeometry, Mask3D, Vec3 } from "../types.js";
+import { add, dot, length, scale, sub } from "./vec3.js";
+import { checkVoxelBudget, DEFAULT_MAX_VOXELS, maskFromDense } from "./mask3d.js";
+import type { GridGeometry, Mask3D, Vec3 } from "./types.js";
 
 function validatePositive(name: string, value: number): void {
   if (!Number.isFinite(value) || value <= 0) {

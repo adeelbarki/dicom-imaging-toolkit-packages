@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { rasterize } from "../../src/contour/rasterize.js";
 import { MalformedContourError } from "../../src/errors.js";
 import type { Contour } from "../../src/contour/types.js";
-import type { Vec3 } from "../../src/types.js";
+import type { Vec3 } from "rt-geometry-js";
 import { axialGrid } from "../helpers.js";
 
 const ring = (cx: number, cy: number, r: number, z: number, n = 64): Vec3[] =>

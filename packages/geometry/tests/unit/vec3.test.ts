@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { angleBetween, normalize } from "../../src/geometry/vec3.js";
+import { angleBetween, normalize } from "../../src/vec3.js";
 import type { Vec3 } from "../../src/types.js";
 
 describe("normalize: degenerate and non-finite input fails at the boundary, not silently", () => {

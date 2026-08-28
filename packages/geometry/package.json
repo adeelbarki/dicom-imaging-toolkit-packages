@@ -1,26 +1,26 @@
 {
-  "name": "rtstruct-js",
-  "version": "0.2.1",
+  "name": "rt-geometry-js",
+  "version": "0.1.0",
   "type": "module",
-  "description": "DICOM RT Structure Set reading and writing, validated against analytic phantoms.",
+  "description": "Shared geometry core for DICOM imaging toolkits: GridGeometry, Mask3D, ScalarField3D, resampling-ready histograms, analytic phantoms, and comparison metrics. No DICOM, network, or filesystem dependency.",
   "keywords": [
     "dicom",
-    "rtstruct",
-    "rt-struct",
-    "radiotherapy",
     "medical-imaging",
-    "contour",
-    "segmentation",
-    "dcmjs"
+    "geometry",
+    "voxel",
+    "mask",
+    "grid",
+    "radiotherapy",
+    "histogram"
   ],
   "license": "MIT",
   "author": "Adeel Khan",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/adeelbarki/dicom-imaging-toolkit-packages.git",
-    "directory": "packages/rtstruct"
+    "directory": "packages/geometry"
   },
-  "homepage": "https://github.com/adeelbarki/dicom-imaging-toolkit-packages/tree/main/packages/rtstruct#readme",
+  "homepage": "https://github.com/adeelbarki/dicom-imaging-toolkit-packages/tree/main/packages/geometry#readme",
   "bugs": {
     "url": "https://github.com/adeelbarki/dicom-imaging-toolkit-packages/issues"
   },
@@ -39,24 +39,16 @@
     "node": ">=20"
   },
   "scripts": {
-    "pretest": "npm run check:deps",
+    "pretest": "node ../../scripts/check-dependency-rule.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
-    "check:deps": "node ../../scripts/check-dependency-rule.mjs",
     "build": "tsc -p tsconfig.build.json",
     "prepublishOnly": "npm run build && npm test"
   },
-  "peerDependencies": {
-    "rt-geometry-js": "^0.1.0"
-  },
   "devDependencies": {
     "@types/node": "^26.2.0",
-    "rt-geometry-js": "^0.1.0",
     "typescript": "^5.6.3",
     "vitest": "^2.1.4"
-  },
-  "dependencies": {
-    "dcmjs": "^0.52.0"
   }
 }

@@ -2,12 +2,12 @@
  * Comparing two masks on the same grid — e.g. an AI-generated contour
  * against a reference/ground-truth one. Run with: npx tsx examples/03-compare-masks.ts
  */
-import { createUniformGrid } from "../src/geometry/grid-geometry.js";
-import { spherePhantom } from "../src/phantom/index.js";
-import { maskFromDense } from "../src/mask/mask3d.js";
-import { distance } from "../src/geometry/vec3.js";
-import { dice, voxelDisagreement, centroidDisplacementMm } from "../src/metrics.js";
-import type { GridGeometry, Mask3D, Vec3 } from "../src/types.js";
+import { createUniformGrid } from "rt-geometry-js";
+import { spherePhantom } from "rt-geometry-js";
+import { maskFromDense } from "rt-geometry-js";
+import { distance } from "rt-geometry-js";
+import { dice, voxelDisagreement, centroidDisplacementMm } from "rt-geometry-js";
+import type { GridGeometry, Mask3D, Vec3 } from "rt-geometry-js";
 
 const grid = createUniformGrid({ rows: 64, columns: 64, planeCount: 32, pixelSpacing: [1, 1], sliceSpacingMm: 1 });
 

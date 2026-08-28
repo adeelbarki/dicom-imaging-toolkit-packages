@@ -1,7 +1,7 @@
 import { createRequire } from "node:module";
+import type { Vec3 } from "rt-geometry-js";
 import type { Contour, ContourGeometricType } from "../contour/types.js";
 import { MalformedContourError } from "../errors.js";
-import type { Vec3 } from "../types.js";
 
 // THE ONLY dcmjs importer — see IMPLEMENTATION_PLAN.md section 3.
 //

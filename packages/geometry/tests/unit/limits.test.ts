@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { createEmptyMask } from "../../src/mask/mask3d.js";
-import { createUniformGrid } from "../../src/geometry/grid-geometry.js";
-import { sortPlanes } from "../../src/geometry/plane-sort.js";
+import { createEmptyMask } from "../../src/mask3d.js";
+import { createUniformGrid } from "../../src/grid-geometry.js";
+import { sortPlanes } from "../../src/plane-sort.js";
 import type { Vec3 } from "../../src/types.js";
 
 describe("SEC: resource limits are enforced BEFORE allocation", () => {

@@ -2,8 +2,8 @@
  * Build a sampling grid, generate a phantom on it, and inspect the mask
  * directly — no DICOM involved yet. Run with: npx tsx examples/01-build-and-inspect-mask.ts
  */
-import { createUniformGrid } from "../src/geometry/grid-geometry.js";
-import { spherePhantom, analyticVolumeMm3 } from "../src/phantom/index.js";
+import { createUniformGrid } from "rt-geometry-js";
+import { spherePhantom, analyticVolumeMm3 } from "rt-geometry-js";
 
 const grid = createUniformGrid({
   rows: 64,

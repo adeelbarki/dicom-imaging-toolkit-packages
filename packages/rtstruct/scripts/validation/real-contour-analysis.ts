@@ -16,7 +16,7 @@ import { readDicomDataset, readRTStruct } from "../../src/dicom/port.js";
 import { readSeriesGeometry } from "../../src/dicom/series-geometry.js";
 import { RTStruct } from "../../src/index.js";
 import { vectorize } from "../../src/contour/vectorize.js";
-import { dice, voxelDisagreement } from "../../src/metrics.js";
+import { dice, voxelDisagreement } from "rt-geometry-js";
 
 const dir = process.argv[2];
 if (!dir) {

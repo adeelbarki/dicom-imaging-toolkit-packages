@@ -1,4 +1,4 @@
-import type { GridTolerance } from "../types.js";
+import type { GridTolerance } from "./types.js";
 
 /**
  * Default noise tolerance for deciding whether two already-built things are the same,

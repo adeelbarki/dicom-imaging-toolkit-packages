@@ -1,4 +1,4 @@
-import type { Vec3 } from "../types.js";
+import type { Vec3 } from "./types.js";
 
 /** Vectors shorter than this are treated as degenerate — floating-point noise, not a real direction. */
 const MIN_VECTOR_LENGTH = 1e-9;

@@ -1,4 +1,4 @@
-import type { Diagnostic, DiagnosticCode, Severity } from "../types.js";
+import type { Diagnostic, Severity } from "./types.js";
 
 // DICOM UIDs are dot-separated digit runs (e.g. 1.2.840.x, 1.2.3.4) and are
 // quasi-identifying — see IMPLEMENTATION_PLAN.md section 6.
@@ -20,7 +20,7 @@ function redactDetail(
 }
 
 export function createDiagnostic(
-  code: DiagnosticCode,
+  code: string,
   severity: Severity,
   message: string,
   detail?: Readonly<Record<string, number | string | boolean>>,

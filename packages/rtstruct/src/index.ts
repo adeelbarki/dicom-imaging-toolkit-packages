@@ -1,28 +1,25 @@
+import { createDiagnostic, FrameOfReferenceMismatchError } from "rt-geometry-js";
+import type { Diagnostic, GridGeometry, Mask3D, Provenance } from "rt-geometry-js";
 import { rasterize } from "./contour/rasterize.js";
 import { vectorize } from "./contour/vectorize.js";
-import { createDiagnostic } from "./diagnostics/index.js";
 import { readRTStruct, writeRTStruct } from "./dicom/port.js";
-import { AmbiguousRoiNameError, FrameOfReferenceMismatchError } from "./errors.js";
-import type { Diagnostic, DicomVolumeResult, GridGeometry, LoadOptions, Mask3D, Provenance, RoiHandle } from "./types.js";
+import { AmbiguousRoiNameError } from "./errors.js";
+import type { DicomVolumeResult, LoadOptions, RoiHandle } from "./types.js";
 
-// Public building blocks — everything needed to construct a GridGeometry or Mask3D
-// from scratch, not just to read/write RTStruct. dicom/port.ts's ROI read/write
-// internals are deliberately NOT re-exported here: RTStruct.load/createFromMask
-// is the intended RTSTRUCT I/O surface (IMPLEMENTATION_PLAN.md section 1).
-// readSeriesGeometry is a separate, standalone capability (build a GridGeometry from
-// real CT/MR slice files) with no equivalent higher-level wrapper, so it is exported.
+// Public building blocks. The entire rt-geometry-js surface (GridGeometry, Mask3D,
+// ScalarField3D, phantoms, metrics, histograms, geometry errors) is re-exported so
+// existing `import { ... } from "rtstruct-js"` paths keep resolving after the geometry
+// extraction. dicom/port.ts's ROI read/write internals are deliberately NOT re-exported:
+// RTStruct.load/createFromMask is the intended RTSTRUCT I/O surface
+// (IMPLEMENTATION_PLAN.md section 1). readSeriesGeometry is a separate, standalone
+// capability (build a GridGeometry from real CT/MR slice files) with no equivalent
+// higher-level wrapper, so it is exported.
+export * from "rt-geometry-js";
 export * from "./types.js";
 export * from "./errors.js";
 export * from "./contour/types.js";
 export * from "./contour/rasterize.js";
 export * from "./contour/vectorize.js";
-export * from "./geometry/grid-geometry.js";
-export * from "./geometry/tolerance.js";
-export * from "./geometry/vec3.js";
-export * from "./geometry/plane-sort.js";
-export * from "./mask/mask3d.js";
-export * from "./phantom/index.js";
-export * from "./metrics.js";
 export * from "./dicom/series-geometry.js";
 
 export interface LoadParams extends LoadOptions {

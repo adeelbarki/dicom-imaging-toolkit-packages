@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { createGridGeometry, createUniformGrid } from "../../src/geometry/grid-geometry.js";
-import { DEFAULT_TOLERANCE } from "../../src/geometry/tolerance.js";
+import { createGridGeometry, createUniformGrid } from "../../src/grid-geometry.js";
+import { DEFAULT_TOLERANCE } from "../../src/tolerance.js";
 import { NonOrthogonalBasisError } from "../../src/errors.js";
 import { axialGrid } from "../helpers.js";
 import type { GridTolerance, Vec3 } from "../../src/types.js";

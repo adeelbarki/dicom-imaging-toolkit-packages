@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { writeCTSlice } from "../../src/dicom/port.js";
 import { readSeriesGeometry } from "../../src/dicom/series-geometry.js";
-import type { Vec3 } from "../../src/types.js";
+import type { Vec3 } from "rt-geometry-js";
 
 /**
  * New functionality added after the original v0.1 spec (44 GEO/MSK/VOL/CTR/RT/IO/SEC

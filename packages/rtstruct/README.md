@@ -227,36 +227,31 @@ no matter how loose the tolerance.
 
 ## Project structure
 
+The geometry core lives in a sibling package, **`rt-geometry-js`** (`../geometry`),
+declared here as a peer dependency. Everything it exports (`GridGeometry`, `Mask3D`,
+`ScalarField3D`, phantoms, metrics, histograms, the geometry errors) is re-exported
+from this package's entry point, so `import { ... } from "rtstruct-js"` keeps resolving.
+
 ```
 src/
-├── index.ts                public entry point (RTStruct + everything re-exported)
-├── types.ts                public type surface
-├── errors.ts
-├── metrics.ts               dice / voxelDisagreement / centroidDisplacement
-├── geometry/
-│   ├── vec3.ts
-│   ├── tolerance.ts
-│   ├── grid-geometry.ts    createGridGeometry, createUniformGrid
-│   └── plane-sort.ts       sort by normal projection, dedupe, reject non-parallel
-├── contour/                 contours <-> mask
-├── mask/                    Mask3D implementation
-├── diagnostics/
-├── phantom/                  cube, sphere, torus + analytic volumes
+├── index.ts                public entry point — RTStruct, plus `export * from "rt-geometry-js"`
+├── types.ts                RTSTRUCT-only types (SeriesGeometry, LoadOptions, RoiHandle, ...)
+├── errors.ts               RTSTRUCT-only errors (geometry errors come from rt-geometry-js)
+├── contour/                 contours <-> mask (rasterize, vectorize)
 └── dicom/
     ├── port.ts                the only dcmjs importer — RTSTRUCT read/write
     └── series-geometry.ts     readSeriesGeometry: CT/MR slice files -> SeriesGeometry
-tests/unit/                   spec tests, organized by area (GEO/MSK/VOL/CTR/RT/IO/SEC),
-                               plus series-geometry.test.ts (new functionality, not part
-                               of the original v0.1 spec)
+tests/unit/                   spec tests, organized by area (CTR/RT/IO), plus
+                               roundtrip.test.ts (the mask->RTSTRUCT->mask gate) and
+                               series-geometry.test.ts
 tests/fixtures.ts             builds DICOM bytes at test time via dicom/port.ts (no vendor files)
 ```
 
-`geometry/`, `contour/`, `mask/`, `roi/`, `phantom/` must never import from
-`dicom/` — enforced by `scripts/check-dependency-rule.mjs`, which runs before
-every `npm test`. This keeps a future package split possible and keeps the
-geometry/mask/phantom core usable without DICOM at all. `dicom/port.ts`'s
-ROI read/write internals are never re-exported from the public entry point
-either — `RTStruct` is the one RTSTRUCT I/O surface. `readSeriesGeometry`
+`contour/` must never import from `dicom/`, and no package may cross the monorepo
+boundaries (the core imports nothing; domain packages don't import each other) —
+enforced by `../../scripts/check-dependency-rule.mjs`, which runs before every
+`npm test`. `dicom/port.ts`'s ROI read/write internals are never re-exported from the
+public entry point — `RTStruct` is the one RTSTRUCT I/O surface. `readSeriesGeometry`
 is exported, since there's no equivalent higher-level wrapper for it.
 
 `Mask3D` and `GridGeometry` are exported as **interfaces**, never classes —

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createUniformGrid } from "../../src/geometry/grid-geometry.js";
+import { createUniformGrid } from "../../src/grid-geometry.js";
 import type { Vec3 } from "../../src/types.js";
 import { axialGrid } from "../helpers.js";
 

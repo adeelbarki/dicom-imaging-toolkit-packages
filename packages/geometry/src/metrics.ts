@@ -1,6 +1,6 @@
 import { GridMismatchError, FrameOfReferenceMismatchError, IndeterminateCentroidError } from "./errors.js";
-import { distance } from "./geometry/vec3.js";
-import { planeThicknessMm } from "./mask/mask3d.js";
+import { distance } from "./vec3.js";
+import { planeThicknessMm } from "./grid-geometry.js";
 import type { GridTolerance, Mask3D, Vec3 } from "./types.js";
 
 /** Throws unless both masks share a GridGeometry — index-by-index comparison is only

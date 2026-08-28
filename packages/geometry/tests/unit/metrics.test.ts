@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { dice, voxelDisagreement, centroidDisplacementMm } from "../../src/metrics.js";
-import { createGridGeometry, createUniformGrid } from "../../src/geometry/grid-geometry.js";
-import { maskFromDense } from "../../src/mask/mask3d.js";
+import { createGridGeometry, createUniformGrid } from "../../src/grid-geometry.js";
+import { maskFromDense } from "../../src/mask3d.js";
 import { GridMismatchError, FrameOfReferenceMismatchError, IndeterminateCentroidError } from "../../src/errors.js";
 import { axialGrid } from "../helpers.js";
 import type { Vec3 } from "../../src/types.js";

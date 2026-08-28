@@ -198,11 +198,23 @@ and `.gitignore` left at root, new private root `package.json`
 and all 120 tests pass unchanged from the new path. Full record in
 `.claude/README.md`.
 
-### Phase B — Extract `rt-geometry-js` 0.1.0
+### Phase B — Extract `rt-geometry-js` 0.1.0 — steps 1-3, 5 ✅ 2026-08-27 (branch `feat/extract-rt-geometry`); steps 4, 6 open
+
+Done in the extraction PR: `packages/geometry` created as `rt-geometry-js` 0.1.0
+(not yet published), the geometry/mask/metrics/phantom/diagnostics code moved
+with `git mv` history intact, `types.ts`/`errors.ts` split geometry-vs-rtstruct,
+`rtstruct-js` rewired to the peer dep with the full geometry surface re-exported
+from its entry point (so Phase C step 2 is already satisfied), tests split across
+the two packages (120 unchanged + 13 new for `ScalarField3D`/histograms = 133,
+all green), typecheck + build clean. Workspace-source resolution via a `paths`
+mapping + a vitest alias; the published build clears the mapping so the emitted
+JS keeps the bare `rt-geometry-js` specifier. **Still open: step 4 (tolerance
+re-derivation) — its own follow-up PR; step 6 (publish) — manual, user-run.**
 
 1. Move geometry, mask, metrics, phantom, diagnostics, provenance, shared
    errors into `packages/geometry/`.
-2. Move `planeThicknessMm()` onto `GridGeometry` (§12 item).
+2. Move `planeThicknessMm()` onto `GridGeometry` (§12 item). — done: method on
+   `GridGeometry`, free function kept as a delegating wrapper.
 3. **Rewrite `check-dependency-rule.mjs`.** It currently enforces
    "`geometry/` never imports `dicom/`" by file path. After extraction
    that boundary is a *package* boundary and the script silently stops

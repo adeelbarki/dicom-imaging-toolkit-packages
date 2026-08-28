@@ -4,7 +4,11 @@
     "noEmit": false,
     "declaration": true,
     "outDir": "dist",
-    "rootDir": "src"
+    "rootDir": "src",
+    // `paths` in the base config maps rt-geometry-js to its source for typecheck/tests.
+    // The published build must instead resolve it as a real dependency (its built dist/),
+    // and keep the bare specifier in the emitted JS — so clear the mapping here.
+    "paths": {}
   },
   "include": ["src"]
 }
