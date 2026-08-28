@@ -6,9 +6,11 @@ First release. DICOM RTDOSE reading and dose-volume histograms, built on `rt-geo
 `^0.1.1` (peer dependency). Part of the `dicom-imaging-toolkit-packages` monorepo
 (roadmap v2, Phase E, PR 2).
 
-**Not a treatment planning system and not clinically validated.** Validation against
-`dicompyler-core` on real TCIA RTDOSE+RTSTRUCT pairs (roadmap §9) is the next step and not
-part of this release.
+**Not a treatment planning system and not clinically validated.** It *is* cross-checked
+against `dicompyler-core` on real TCIA RTDOSE + RTSTRUCT + CT triples (roadmap §9):
+194 / 195 metric comparisons within tolerance across 3 Varian Eclipse pancreas SBRT plans
+× 5 ROIs — see `VALIDATION.md`. That is reference-implementation agreement, not clinical
+validation.
 
 ### Added
 
@@ -41,7 +43,9 @@ part of this release.
 
 ### Known / deferred
 
-- No validation table against `dicompyler-core` yet (roadmap §9, Phase E PR 3).
+- `dicompyler-core` cross-check covers one planning system (Varian Eclipse); Elekta /
+  RayStation / Pinnacle dose needs an NBIA-authenticated TCIA download. No
+  `DoseSummationType BEAM` / `MULTI_PLAN` case yet.
 - `volumePolicy` is whole-voxel binary only; fractional edge coverage / supersampling is a
   later minor (roadmap §6.3).
 - Single-frame dose grids sample in-plane only, and volume queries need a structure mask

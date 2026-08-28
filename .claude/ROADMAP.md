@@ -374,7 +374,8 @@ DVH criterion). Full table + findings in `packages/rtdose/VALIDATION.md`.
   (added as a **devDependency** — dev-only, not in `src/`, invisible to
   `check-dependency-rule.mjs` which scans `src/` imports only, never ships).
 - `metrics-dicompyler.py` — same folder + same metric shape via
-  `dvhcalc.get_dvh` defaults. `pip install dicompyler-core pydicom`.
+  `dvhcalc.get_dvh` defaults. Needs a `pydicom<3` venv (dicompyler-core
+  0.5.6 imports `pydicom.dicomio.read_file`, removed in pydicom 3).
 - `compare.mjs` — joins by ROI name, prints a Markdown Δ / Δ% table, flags
   dose Δ > max(0.5 Gy, 2%) / vol Δ > max(1 cm³, 2%) / V% Δ > 2 pp. Report,
   not a gate.
@@ -397,9 +398,11 @@ needs an NBIA-authenticated TCIA download).
 from `packages/rtstruct/scratch/` to the **repo root** `scratch/` so every
 package shares it. Still gitignored (`.gitignore` `scratch/` matches at any
 depth). `tolerance-derivation.ts`'s usage docstring updated to the new
-`../../scratch/...` relative path. The existing `data-real/` cases are
-CT/MR + RTSTRUCT only — **no RTDOSE**, so PR 3's agreement table needs a
-fresh download of dose-bearing cases.
+`../../scratch/...` relative path. The `data-real/` cases are CT/MR +
+RTSTRUCT only (no RTDOSE); PR 3's dose cases were downloaded fresh into
+`scratch/data-dose/` — only `Pancreatic-CT-CBCT-SEG` and
+`Vestibular-Schwannoma-SEG` expose RT dose through TCIA's unauthenticated
+API (checked all 156 collections).
 
 ### Phase F — `dicom-seg-js` 0.1.0
 
@@ -560,9 +563,12 @@ Repeat the pattern for each new package, and **build the comparison
 harness before the implementation is finished** so work is checked
 against a reference throughout rather than at the end.
 
-- **Dose:** real RTDOSE + RTSTRUCT pairs from TCIA. Run D95, D50, V20,
-  mean dose through `dicompyler-core` and through `rtdose-js`. Publish the
-  agreement table including disagreements and their explanation.
+- **Dose:** ✅ done (Phase E PR 3, 2026-08-28). Real RTDOSE + RTSTRUCT + CT
+  triples from TCIA `Pancreatic-CT-CBCT-SEG` run through `dicompyler-core`
+  and `rtdose-js`; agreement table + the one explained outlier in
+  `packages/rtdose/VALIDATION.md` (194/195 comparisons within tolerance).
+  Harness: `packages/rtdose/scripts/validation/`. Follow-up: non-Varian
+  planning systems (NBIA-login-gated on TCIA).
 - **SEG:** round-trip real FRACTIONAL and BINARY SEG files; compare
   against `pydicom-seg` / `highdicom` on the same inputs. Record which
   fractional types appear in the wild, the way the encoding distribution
