@@ -12,7 +12,7 @@ a `Mask3D` built by one meets the same `GridGeometry` implementation in another.
 
 **Standard pinned (for the doc references):** DICOM PS3.3 **2026c**.
 
-**Status:** published — [`rt-geometry-js`](https://www.npmjs.com/package/rt-geometry-js) 0.1.0 on npm, extracted from `rtstruct-js` 0.2.1. See `CHANGELOG.md`.
+**Status:** published — [`rt-geometry-js`](https://www.npmjs.com/package/rt-geometry-js) 0.1.1 on npm, extracted from `rtstruct-js` 0.2.1. See `CHANGELOG.md`.
 
 ## Install
 
@@ -28,6 +28,7 @@ npm install rt-geometry-js
 | Planes | `sortPlanes` — projection sort, duplicate detection, non-parallel rejection |
 | Mask | `createEmptyMask`, `maskFromDense`, `Mask3D`, `checkVoxelBudget`, `DEFAULT_MAX_VOXELS` |
 | Scalar field | `createScalarField`, `ScalarField3D` — a number per voxel |
+| Resampling | `sampleFieldAt` (trilinear / nearest, at a physical point), `resampleField`, `resampleMask` — for crossing grids (dose ↔ structure) |
 | Histograms / DVH | `histogram`, `volumeAboveThreshold`, `valueAtVolumeFraction` |
 | Phantoms | `cubePhantom`, `spherePhantom`, `torusPhantom`, `analyticVolumeMm3` |
 | Metrics | `dice`, `voxelDisagreement`, `centroidDisplacementMm` |

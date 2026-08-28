@@ -13,6 +13,7 @@ export * from "./grid-geometry.js";
 export * from "./plane-sort.js";
 export * from "./mask3d.js";
 export * from "./scalar-field.js";
+export * from "./resample.js";
 export * from "./histogram.js";
 export * from "./phantom.js";
 export * from "./metrics.js";

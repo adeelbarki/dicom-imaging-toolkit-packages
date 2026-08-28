@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.1.1] - 2026-08-28
+
+Additive — no breaking change, `^0.1.0` covers it.
+
+### New
+
+- **Resampling** (`resample.ts`), the primitive `rtdose-js` needs because dose grids and
+  structure grids almost never coincide:
+  - `sampleFieldAt(field, patientPoint, opts)` — value of a `ScalarField3D` at an
+    arbitrary physical point. `"trilinear"` (default; exact for linear fields,
+    corner-clamped at the grid edge) or `"nearest"`. Interpolates along the plane axis by
+    the planes' projected positions, so irregular slice spacing is handled correctly. A
+    point outside the extent returns `opts.outOfBounds` (default `0`).
+  - `resampleField(source, targetGeometry, opts)` — a new `ScalarField3D` on
+    `targetGeometry`, each voxel sampled from `source` at its physical centre.
+  - `resampleMask(source, targetGeometry, opts)` — the reverse direction (structure onto
+    the dose grid) by nearest-voxel membership.
+  - All three throw `FrameOfReferenceMismatchError` when the two grids declare different
+    frames of reference.
+
 ## [0.1.0] - 2026-08-27
 
 First release. Extracted from `rtstruct-js` 0.2.1 as the shared geometry core for the
