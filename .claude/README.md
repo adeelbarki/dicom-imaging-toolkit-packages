@@ -1255,3 +1255,39 @@ gained a "Re-run history" note; `CHANGELOG` records the scope.
 CLI `validate` (needs a design decision). CI is Phase D (`feat/ci`).
 Publishing 0.3.0 is step 6 — manual, and should wait until `feat/ci` is
 merged so CI runs against the release.
+
+## Phase E PR 1 — rt-geometry-js resampling, 0.1.1 (2026-08-28)
+
+Branch `feat/geometry-resampling`. §6 decisions (locked with the user):
+sample dose at structure voxel centres by default (reverse via
+`resampleMask`), trilinear default (nearest exposed), whole-voxel binary
+volumes with the method recorded, supersampling deferred.
+
+`src/resample.ts`:
+- `sampleFieldAt(field, point, { method, outOfBounds })` — trilinear
+  (corner-clamped at the boundary; exact for linear fields) or nearest.
+  `toContinuousIndex` maps a physical point to `(fx, fy, fz)` where `fz`
+  interpolates between bracketing planes **by projected position**, so
+  irregular slice spacing works. A point > half a voxel outside any edge,
+  or off the plane stack, returns `outOfBounds` (default 0).
+- `resampleField(source, targetGeometry, opts)` — new `ScalarField3D` on
+  the target, each voxel sampled at its physical centre. This is the dose
+  ↔ structure bridge: `resampleField(dose, roiMask.geometry)` then the
+  Phase B DVH functions.
+- `resampleMask(source, targetGeometry, opts)` — reverse direction,
+  nearest-voxel membership (interpolating a boolean is meaningless).
+- All three throw `FrameOfReferenceMismatchError` across declared FoRs.
+
+10 tests (`resample.test.ts`): linear-field exactness, nearest, OOB +
+custom fill, edge clamp, shifted-grid identity, same-grid identity, FoR
+refusal, irregular-plane interpolation, mask membership preservation,
+coarsening.
+
+Versioning: released as **0.1.1**, not 0.2.0. For 0.x, `^0.1.0` means
+`>=0.1.0 <0.2.0`, so `rtstruct-js`'s `peerDependencies: { rt-geometry-js:
+^0.1.0 }` already accepts it — no `rtstruct-js` republish needed.
+`rtdose-js` will pin `^0.1.1`. A real breaking change is when geometry
+goes 0.2.0 and every domain package bumps its peer range together.
+
+154 tests total (90 geometry + 64 rtstruct); typecheck + build clean;
+`resample.{js,d.ts}` in the tarball.

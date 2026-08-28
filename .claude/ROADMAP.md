@@ -305,9 +305,26 @@ full test suite including the round-trip gate
 
 **Closed the second outstanding v0.1 exit criterion.**
 
-### Phase E — `rtdose-js` 0.1.0
+### Phase E — `rtdose-js` 0.1.0 — in progress
 
 Builds `ScalarField3D`, resampling, and histograms for real.
+
+**§6 decisions made (2026-08-28):** resampling default = **sample dose at
+structure voxel centres** (reverse direction exposed via `resampleMask`);
+interpolation default = **trilinear** (nearest exposed); volume accounting =
+**whole-voxel binary**, computation method recorded on every metric;
+supersampling/fractional coverage deferred to a later minor.
+
+**PR 1 ✅ — `rt-geometry-js` 0.1.1 (branch `feat/geometry-resampling`):** added
+`sampleFieldAt` / `resampleField` / `resampleMask` in `resample.ts` (trilinear +
+nearest; plane-axis interpolation by projected position so irregular spacing is
+handled; `outOfBounds` fill; `FrameOfReferenceMismatchError` across FoRs). 10
+tests. Released additively as 0.1.1 — `^0.1.0` covers it, so `rtstruct-js` needs
+no change; `rtdose-js` will require `^0.1.1`. The DVH functions
+(`histogram`/`volumeAboveThreshold`/`valueAtVolumeFraction`) already exist from
+Phase B.
+
+**PR 2 (next) — `packages/rtdose/` `rtdose-js` 0.1.0:**
 
 ```
 DoseGrid                    RTDOSE parse, DoseGridScaling applied
@@ -318,7 +335,12 @@ dose.getD(percent, mask)    D95, D50, D2
 dose.getV(gy, mask)         V5, V20, V30
 ```
 
-See §6 for decisions required before coding starts.
+Internally: resample the dose field onto `mask.geometry` (trilinear) once per
+grid, then the Phase B DVH functions. Clinical disclaimer at the top of the
+README, `method` on every return, `docs/DVH-METHOD.md`.
+
+**PR 3 — validation** vs `dicompyler-core` on real TCIA RTDOSE+RTSTRUCT pairs
+(§9). Needs data + a Python env; may lag PR 2.
 
 ### Phase F — `dicom-seg-js` 0.1.0
 
