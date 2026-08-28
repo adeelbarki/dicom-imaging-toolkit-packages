@@ -14,9 +14,17 @@ DICOM **RTDOSE** reading and dose-volume histograms, built on
 
 **Status:** 0.1.0 — first release. Reads a dose grid, samples it at a point, and answers
 D/V/mean/DVH queries against a structure mask. `rt-geometry-js` `^0.1.1` is a **peer
-dependency** (the resampling primitive landed in 0.1.1). Validation against
-`dicompyler-core` on real TCIA data is the next step and not yet published — treat 0.1.0 as
-unvalidated.
+dependency** (the resampling primitive landed in 0.1.1).
+
+**Validated against real DICOM files**, not just phantoms — `rtdose-js`'s D2/D50/D95,
+V5Gy/V20Gy/V30Gy, and mean/min/max dose are cross-checked against `dicompyler-core` on real
+TCIA RTDOSE + RTSTRUCT + CT triples (3 Varian Eclipse pancreas SBRT plans, 5 ROIs each):
+**194 / 195 metric comparisons within tolerance**, every clinical quantity agreeing to
+sub-1%, structure volumes to ≤ 0.2%. See
+[VALIDATION.md](https://github.com/adeelbarki/dicom-imaging-toolkit-packages/blob/main/packages/rtdose/VALIDATION.md)
+for the full table and the one explained outlier (a single-voxel `max`-dose boundary
+effect) — this link works from both GitHub and the npm page. Reference-implementation
+agreement is **not** clinical validation; the disclaimer at the top still stands.
 
 **Standard pinned (for doc references):** DICOM PS3.3 **2026c**.
 
@@ -46,6 +54,10 @@ dose.statistics(ptv);         // { minGy, maxGy, meanGy, volumeMm3, voxelCount, 
 dose.calculateDVH(ptv);       // { kind: "cumulative", points: [{ doseGy, volumeMm3, volumeFraction }], ... }
 dose.sample([x, y, z]);       // interpolated dose at a physical point (0 outside the grid)
 ```
+
+`rtstruct-js` is only used here to produce the ROI `Mask3D` — it is **not** a dependency of
+`rtdose-js`. Any `Mask3D` on any `rt-geometry-js` `GridGeometry` works (a phantom, your own
+rasterizer, a SEG mask later).
 
 Every mask query resamples the dose field **onto the structure mask's grid** — dose is
 sampled at each structure voxel centre (trilinear by default), then
