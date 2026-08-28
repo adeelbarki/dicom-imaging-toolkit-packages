@@ -1,6 +1,5 @@
-import { ResourceLimitError, UnclosedContourError } from "../errors.js";
-import { DEFAULT_MAX_VOXELS } from "../mask/mask3d.js";
-import type { Mask3D } from "../types.js";
+import { DEFAULT_MAX_VOXELS, ResourceLimitError, type Mask3D } from "rt-geometry-js";
+import { UnclosedContourError } from "../errors.js";
 import type { Contour } from "./types.js";
 
 interface Point2D {

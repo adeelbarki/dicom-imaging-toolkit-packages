@@ -2,10 +2,10 @@
  * The core workflow: mask -> real DICOM RTSTRUCT bytes -> mask.
  * Run with: npx tsx examples/02-dicom-roundtrip.ts
  */
-import { createUniformGrid } from "../src/geometry/grid-geometry.js";
-import { spherePhantom } from "../src/phantom/index.js";
+import { createUniformGrid } from "rt-geometry-js";
+import { spherePhantom } from "rt-geometry-js";
 import { RTStruct } from "../src/index.js";
-import { dice } from "../src/metrics.js";
+import { dice } from "rt-geometry-js";
 
 const grid = createUniformGrid({ rows: 64, columns: 64, planeCount: 32, pixelSpacing: [1, 1], sliceSpacingMm: 1 });
 const original = spherePhantom(grid, 10);

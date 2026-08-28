@@ -1,4 +1,5 @@
-import { createGridGeometry, type GridGeometry, type Vec3 } from "rt-geometry-js";
+import { createGridGeometry } from "../src/grid-geometry.js";
+import type { GridGeometry, Vec3 } from "../src/types.js";
 
 /** An axial (identity-orientation) grid with the given plane z-positions. */
 export function axialGrid(zPositionsMm: readonly number[], pixelSpacing: readonly [number, number] = [1, 1]): GridGeometry {

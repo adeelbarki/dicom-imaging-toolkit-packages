@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { createEmptyMask, maskFromDense } from "../../src/mask/mask3d.js";
+import { createEmptyMask, maskFromDense } from "../../src/mask3d.js";
 import { ResourceLimitError } from "../../src/errors.js";
-import { cubePhantom } from "../../src/phantom/index.js";
-import { createUniformGrid } from "../../src/geometry/grid-geometry.js";
+import { cubePhantom } from "../../src/phantom.js";
+import { createUniformGrid } from "../../src/grid-geometry.js";
 
 const g = () => createUniformGrid({ rows: 16, columns: 16, planeCount: 8, pixelSpacing: [1, 1], sliceSpacingMm: 1 });
 

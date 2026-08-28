@@ -1022,3 +1022,118 @@ green**, all run from `packages/rtstruct/` via the workspace root.
 Not done here — later roadmap phases: `rt-geometry-js` extraction (Phase
 B), the dependency-rule rewrite (Phase B), CI (Phase D), a root
 `README.md`, and `docs/`.
+
+## Phase B — rt-geometry-js extraction (2026-08-27)
+
+Roadmap v2 §5 Phase B, steps 1-3 and 5. Branch `feat/extract-rt-geometry`.
+Steps 4 (tolerance re-derivation) and 6 (publish) are deliberately not in
+this PR — 4 is its own follow-up, 6 is a manual user action.
+
+### The split
+
+`git mv` (history intact — `git log --follow` walks through the pre-split
+commits) moved into `packages/geometry/src/`, flattened (no subdirs):
+`vec3` `tolerance` `grid-geometry` `plane-sort` (from `geometry/`),
+`mask3d` (from `mask/`), `phantom` (from `phantom/index.ts`), `metrics`,
+`diagnostics` (from `diagnostics/index.ts`), plus `types.ts` and
+`errors.ts`. `rtstruct-js` keeps `contour/`, `dicom/` (including
+`series-geometry.ts` — the roadmap's "Already satisfied" note said it
+stays in the DICOM I/O layer, and it did), and `index.ts`.
+
+`types.ts` / `errors.ts` were split, not moved wholesale:
+
+- **Geometry `types.ts`:** `Vec3`, `GridGeometry` (+ new `planeThicknessMm`
+  method), `GridPlane`, `GridTolerance`, `SliceAssociation`,
+  `HoleInterpretation`, `Provenance`, `Severity`, `Diagnostic`,
+  `VolumeMethod`/`VolumeResult`, `Mask3D`. `Diagnostic.code` widened from
+  the RTSTRUCT code union to `string` — geometry has no business naming
+  `MISSING_RT_ROI_OBSERVATIONS`. `createDiagnostic` takes `string`.
+- **rtstruct `types.ts`:** `SeriesGeometry`, `DicomSliceReference`,
+  `DiagnosticCode` (the union, kept exported for consumers who switch on
+  it), `Strictness`, `DicomVolumeResult`, `RoiHandle`, `ParserLimits`,
+  `LoadOptions` — it `import type`s the geometry types it references.
+- **Geometry `errors.ts`:** `ResourceLimitError`, `NonParallelPlanesError`,
+  `NonOrthogonalBasisError`, `IndeterminateVolumeError`,
+  `GridMismatchError`, `IndeterminateCentroidError`,
+  `FrameOfReferenceMismatchError` (metrics throws it too, not just
+  RTStruct.load — comment updated), `NotImplementedError`.
+- **rtstruct `errors.ts`:** `XorHomogeneityError`, `InconsistentSeriesError`,
+  `MalformedContourError`, `UnclosedContourError`, `AmbiguousRoiNameError`.
+
+### Phase C step 2 already satisfied
+
+`rtstruct-js`'s `index.ts` does `export * from "rt-geometry-js"` alongside
+its own `export * from "./types.js"` / `"./errors.js"`. No collision
+because the local files export only rtstruct-specific names. So
+`import { GridGeometry, ResourceLimitError, dice } from "rtstruct-js"`
+still resolves. Internal rtstruct files import geometry symbols directly
+from `rt-geometry-js`, not via a local re-export shim.
+
+### planeThicknessMm
+
+Now a method on `GridGeometry` (roadmap step 2), body moved from
+`mask3d.ts` into the `createGridGeometry` object literal. Throws
+`IndeterminateVolumeError` on a single-plane grid (callers already guard,
+so no behaviour change). The free `planeThicknessMm(geometry, i)` stays,
+as a one-line delegator, exported from `grid-geometry.ts`.
+
+### New in geometry (roadmap step 5 — built, not stubbed)
+
+- `ScalarField3D` / `createScalarField` (`scalar-field.ts`) — mirrors
+  `Mask3D`'s indexing exactly (`Float32Array`, plane-major then row-major),
+  reuses `checkVoxelBudget` for the SEC-01 allocation guard.
+- `histogram` / `volumeAboveThreshold` / `valueAtVolumeFraction`
+  (`histogram.ts`) — the DVH engine. `valueAtVolumeFraction(dose, roi,
+  0.95)` = D95, `volumeAboveThreshold(dose, roi, 20)` = V20 in mm³.
+  Per-voxel volumes use `planeThicknessMm` so irregular spacing is
+  correct. `GridMismatchError` unless field and mask share a grid
+  (cross-grid resampling is Phase E). 13 new tests (SF-01..05,
+  HIST-01..08).
+
+### check-dependency-rule.mjs (roadmap step 3)
+
+Rewritten and moved to the repo root `scripts/`. Discovers workspace
+packages from their `package.json` names, classifies core / convert /
+domain, and flags: core importing any workspace package; a domain package
+importing another domain package; anything importing `rt-convert-js`. The
+old intra-package "contour must not import dicom" check is kept for
+`rtstruct-js`. Wired as each package's `pretest` (`node
+../../scripts/check-dependency-rule.mjs`) and a root `check:deps`.
+
+### Workspace resolution
+
+`rtstruct-js` resolves `rt-geometry-js` from **source** for typecheck and
+tests — `tsconfig.json` `paths: { "rt-geometry-js": ["../geometry/src/index.ts"] }`
+plus a matching `resolve.alias` in `vitest.config.ts`. No build step
+needed for the inner loop. `tsconfig.build.json` sets `paths: {}` so the
+published build resolves the real dependency (its `dist/`) and the emitted
+JS keeps the bare `rt-geometry-js` specifier. Build order matters
+(geometry before rtstruct); `npm run build --workspaces` gets it right
+alphabetically. One gotcha hit and fixed: the pre-`paths:{}` build pulled
+geometry `src/*.ts` into rtstruct's program and emitted `.js`/`.d.ts`
+siblings into `packages/geometry/src/` — cleaned, won't recur.
+
+### Verification
+
+`tsc --noEmit` clean both packages; `npm run build` clean in order; the
+emitted `rtstruct-js` `dist/index.js` keeps `from "rt-geometry-js"`;
+`npm test` = dep-rule + **80 geometry + 53 rtstruct = 133 green** (120
+carried over unchanged, 13 new).
+
+### Package files added
+
+`packages/geometry/`: `package.json` (no runtime deps — exit criterion:
+no DICOM/network/fs), `tsconfig.json` / `tsconfig.build.json` /
+`vitest.config.ts` (no setupFiles — geometry has no fixtures), `README.md`,
+`CHANGELOG.md` (0.1.0), `LICENSE`. `rtstruct-js` gains `peerDependencies`
++ `devDependencies` `rt-geometry-js: ^0.1.0` (roadmap §4 — peer, so npm
+can't install two copies).
+
+### Not done here
+
+Step 4 (tolerance re-derivation from the 13 real files in
+`scratch/data-real/`) — follow-up PR. Step 6 (publish both packages) —
+manual. CI (Phase D). Root `README.md` and `docs/`. `DiagnosticCode`
+widening to `string` is a latent minor break for anyone who did
+`const c: DiagnosticCode = someDiagnostic.code` — note it in the
+`rtstruct-js` 0.3.0 changelog (Phase C).

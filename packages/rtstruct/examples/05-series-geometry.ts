@@ -9,9 +9,9 @@
  */
 import { writeCTSlice } from "../src/dicom/port.js";
 import { readSeriesGeometry } from "../src/dicom/series-geometry.js";
-import { spherePhantom } from "../src/phantom/index.js";
+import { spherePhantom } from "rt-geometry-js";
 import { RTStruct } from "../src/index.js";
-import type { Vec3 } from "../src/types.js";
+import type { Vec3 } from "rt-geometry-js";
 
 const ROW_DIRECTION: Vec3 = [1, 0, 0];
 const COLUMN_DIRECTION: Vec3 = [0, 1, 0];

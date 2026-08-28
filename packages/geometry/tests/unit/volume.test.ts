@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { cubePhantom, analyticVolumeMm3 } from "../../src/phantom/index.js";
-import { createUniformGrid } from "../../src/geometry/grid-geometry.js";
+import { cubePhantom, analyticVolumeMm3 } from "../../src/phantom.js";
+import { createUniformGrid } from "../../src/grid-geometry.js";
 import { IndeterminateVolumeError } from "../../src/errors.js";
 
 describe("VOL: voxel volume against analytic ground truth", () => {

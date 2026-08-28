@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { RTStruct, RTStructImpl } from "../../src/index.js";
-import { AmbiguousRoiNameError, FrameOfReferenceMismatchError } from "../../src/errors.js";
-import { createUniformGrid } from "../../src/geometry/grid-geometry.js";
-import { cubePhantom } from "../../src/phantom/index.js";
+import { FrameOfReferenceMismatchError } from "rt-geometry-js";
+import { AmbiguousRoiNameError } from "../../src/errors.js";
+import { createUniformGrid } from "rt-geometry-js";
+import { cubePhantom } from "rt-geometry-js";
 
 const g = (frameOfReferenceUID?: string) =>
   createUniformGrid({ rows: 32, columns: 32, planeCount: 16, pixelSpacing: [1, 1], sliceSpacingMm: 1, frameOfReferenceUID });

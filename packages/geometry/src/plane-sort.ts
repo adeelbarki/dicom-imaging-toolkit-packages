@@ -1,6 +1,6 @@
-import { createDiagnostic } from "../diagnostics/index.js";
-import { NonParallelPlanesError } from "../errors.js";
-import type { Diagnostic, GridPlane, Vec3 } from "../types.js";
+import { createDiagnostic } from "./diagnostics.js";
+import { NonParallelPlanesError } from "./errors.js";
+import type { Diagnostic, GridPlane, Vec3 } from "./types.js";
 import { dot, normalize, scale, sub } from "./vec3.js";
 
 export interface SortPlanesResult {

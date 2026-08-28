@@ -1,5 +1,5 @@
-import { NonOrthogonalBasisError } from "../errors.js";
-import type { GridGeometry, GridPlane, GridTolerance, Vec3 } from "../types.js";
+import { IndeterminateVolumeError, NonOrthogonalBasisError } from "./errors.js";
+import type { GridGeometry, GridPlane, GridTolerance, Vec3 } from "./types.js";
 import { sortPlanes } from "./plane-sort.js";
 import { DEFAULT_TOLERANCE } from "./tolerance.js";
 import { add, angleBetween, cross, distance, dot, normalize, scale, sub } from "./vec3.js";
@@ -192,9 +192,39 @@ export function createGridGeometry(params: CreateGridGeometryParams): GridGeomet
       });
       return best;
     },
+
+    /**
+     * Physical thickness attributed to one plane: the average of the distances to its
+     * neighbours, or the single-neighbour distance at the ends of the stack. For uniformly
+     * spaced grids this reduces exactly to the slice spacing. Throws for a single-plane
+     * grid — with no second plane, slice thickness cannot be inferred from geometry.
+     */
+    planeThicknessMm(planeIndex: number): number {
+      const planes = geometry.planes;
+      const n = planes.length;
+      if (n < 2) {
+        throw new IndeterminateVolumeError(
+          "plane thickness is undefined for a single-plane grid — there is no neighbouring " +
+            "plane to measure slice spacing from",
+        );
+      }
+      const proj = (i: number) => dot(at(planes, i).position, gridNormal);
+      if (planeIndex === 0) return proj(1) - proj(0);
+      if (planeIndex === n - 1) return proj(n - 1) - proj(n - 2);
+      return (proj(planeIndex + 1) - proj(planeIndex - 1)) / 2;
+    },
   };
 
   return geometry;
+}
+
+/**
+ * Free-function form of {@link GridGeometry.planeThicknessMm}, kept for callers that
+ * imported it from here (or, before the geometry extraction, from the mask module) rather
+ * than calling the method. Prefer `geometry.planeThicknessMm(planeIndex)`.
+ */
+export function planeThicknessMm(geometry: GridGeometry, planeIndex: number): number {
+  return geometry.planeThicknessMm(planeIndex);
 }
 
 export interface CreateUniformGridParams {

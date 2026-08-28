@@ -1,9 +1,17 @@
+import {
+  angleBetween,
+  createDiagnostic,
+  createGridGeometry,
+  cross,
+  DEFAULT_TOLERANCE,
+  dot,
+  normalize,
+  type Diagnostic,
+  type GridTolerance,
+  type Vec3,
+} from "rt-geometry-js";
 import { InconsistentSeriesError } from "../errors.js";
-import { createDiagnostic } from "../diagnostics/index.js";
-import { createGridGeometry } from "../geometry/grid-geometry.js";
-import { DEFAULT_TOLERANCE } from "../geometry/tolerance.js";
-import { angleBetween, cross, dot, normalize } from "../geometry/vec3.js";
-import type { Diagnostic, DicomSliceReference, GridTolerance, SeriesGeometry, Vec3 } from "../types.js";
+import type { DicomSliceReference, SeriesGeometry } from "../types.js";
 import { readDicomDataset } from "./port.js";
 
 const SLICE_ORDER_EPSILON_MM = 1e-6;

@@ -3,7 +3,7 @@
  * often end up in application logs, and sopInstanceUID-style identifiers
  * are quasi-identifying. Run with: npx tsx examples/04-diagnostics-and-redaction.ts
  */
-import { createUniformGrid } from "../src/geometry/grid-geometry.js";
+import { createUniformGrid } from "rt-geometry-js";
 import { writeRTStruct } from "../src/dicom/port.js";
 import { RTStruct } from "../src/index.js";
 

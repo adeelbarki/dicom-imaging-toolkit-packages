@@ -1,18 +1,11 @@
-import { IndeterminateVolumeError, NotImplementedError, ResourceLimitError } from "../errors.js";
-import { dot } from "../geometry/vec3.js";
-import type { GridGeometry, Mask3D, VolumeMethod, VolumeResult } from "../types.js";
+import { IndeterminateVolumeError, NotImplementedError, ResourceLimitError } from "./errors.js";
+import type { GridGeometry, Mask3D, VolumeMethod, VolumeResult } from "./types.js";
 
 /** ~268M voxels (1 byte/voxel) — a sane default until callers supply ParserLimits.maxVoxels.
  *  Exported: vectorize.ts reuses the same threshold, since it guards the same underlying
  *  resource (a Mask3D's voxel count) at a second choke point (maskFromDense-built masks
  *  never pass through createEmptyMask's check). */
 export const DEFAULT_MAX_VOXELS = 256 * 1024 * 1024;
-
-function at<T>(arr: readonly T[], index: number): T {
-  const value = arr[index];
-  if (value === undefined) throw new RangeError(`plane index ${index} out of range (length ${arr.length})`);
-  return value;
-}
 
 /**
  * A Uint8Array silently returns `undefined` for an out-of-range index, and
@@ -39,23 +32,6 @@ function safeVoxelCount(geometry: GridGeometry): number {
   return voxelCount;
 }
 
-/**
- * Physical thickness attributed to one plane: the average of the distances
- * to its neighbors, or the single neighbor distance at the ends of the
- * stack. For uniformly-spaced grids this is exactly the slice spacing.
- * Callers must ensure planes.length > 1 — the metrics.ts and computeVoxelVolumeMm3
- * call sites both guard the single-plane case before calling this.
- */
-export function planeThicknessMm(geometry: GridGeometry, planeIndex: number): number {
-  const normal = geometry.normal();
-  const planes = geometry.planes;
-  const n = planes.length;
-  const proj = (i: number) => dot(at(planes, i).position, normal);
-  if (planeIndex === 0) return proj(1) - proj(0);
-  if (planeIndex === n - 1) return proj(n - 1) - proj(n - 2);
-  return (proj(planeIndex + 1) - proj(planeIndex - 1)) / 2;
-}
-
 function computeVoxelVolumeMm3(geometry: GridGeometry, buffer: Uint8Array, sliceSize: number): number {
   if (geometry.planes.length === 1) {
     throw new IndeterminateVolumeError(
@@ -69,7 +45,7 @@ function computeVoxelVolumeMm3(geometry: GridGeometry, buffer: Uint8Array, slice
     const offset = k * sliceSize;
     let n = 0;
     for (let i = 0; i < sliceSize; i++) if (buffer[offset + i] !== 0) n++;
-    total += n * areaMm2 * planeThicknessMm(geometry, k);
+    total += n * areaMm2 * geometry.planeThicknessMm(k);
   }
   return total;
 }

@@ -1,4 +1,4 @@
-import type { Vec3 } from "../types.js";
+import type { Vec3 } from "rt-geometry-js";
 
 export type ContourGeometricType =
   | "CLOSED_PLANAR"

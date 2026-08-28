@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { vectorize } from "../../src/contour/vectorize.js";
-import { ResourceLimitError } from "../../src/errors.js";
-import { maskFromDense } from "../../src/mask/mask3d.js";
-import { createUniformGrid } from "../../src/geometry/grid-geometry.js";
+import { ResourceLimitError } from "rt-geometry-js";
+import { maskFromDense } from "rt-geometry-js";
+import { createUniformGrid } from "rt-geometry-js";
 
 const grid = (rows: number, columns: number) =>
   createUniformGrid({ rows, columns, planeCount: 1, pixelSpacing: [1, 1], sliceSpacingMm: 1 });

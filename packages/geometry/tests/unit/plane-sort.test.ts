@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { sortPlanes } from "../../src/geometry/plane-sort.js";
+import { sortPlanes } from "../../src/plane-sort.js";
 import type { GridPlane, Vec3 } from "../../src/types.js";
 
 const NORMAL: Vec3 = [0, 0, 1];

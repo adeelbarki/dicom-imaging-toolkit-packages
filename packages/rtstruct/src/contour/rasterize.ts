@@ -1,8 +1,16 @@
-import { createDiagnostic } from "../diagnostics/index.js";
+import {
+  createDiagnostic,
+  dot,
+  maskFromDense,
+  sub,
+  type Diagnostic,
+  type GridGeometry,
+  type HoleInterpretation,
+  type Mask3D,
+  type Provenance,
+  type Vec3,
+} from "rt-geometry-js";
 import { MalformedContourError, XorHomogeneityError } from "../errors.js";
-import { dot, sub } from "../geometry/vec3.js";
-import { maskFromDense } from "../mask/mask3d.js";
-import type { Diagnostic, GridGeometry, HoleInterpretation, Mask3D, Provenance, Vec3 } from "../types.js";
 import type { Contour, ContourGeometricType } from "./types.js";
 
 export interface RasterizeResult {
