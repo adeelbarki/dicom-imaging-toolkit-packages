@@ -198,7 +198,7 @@ and `.gitignore` left at root, new private root `package.json`
 and all 120 tests pass unchanged from the new path. Full record in
 `.claude/README.md`.
 
-### Phase B — Extract `rt-geometry-js` 0.1.0 — steps 1-5 ✅ 2026-08-27; step 6 (publish) open
+### Phase B — Extract `rt-geometry-js` 0.1.0 — ✅ complete 2026-08-27 (`rt-geometry-js` 0.1.0 published to npm)
 
 Extraction PR (branch `feat/extract-rt-geometry`, merged): `packages/geometry`
 created as `rt-geometry-js` 0.1.0 (not yet published), the
@@ -220,7 +220,9 @@ origins — **all exactly zero**. `DEFAULT_TOLERANCE` values kept (0.5 / 0.01 /
 independent pipelines); the `tolerance.ts` doc comment and `VALIDATION.md`
 Finding 6 now record the evidence instead of admitting a guess.
 
-**Still open: step 6 (publish `rt-geometry-js` 0.1.0) — manual, user-run.**
+Step 6: `rt-geometry-js` 0.1.0 published to npm (2026-08-27). **Phase B done.**
+`rtstruct-js` still ships 0.2.1 (its peer-dep wiring lands with the 0.3.0
+release in Phase C).
 
 1. Move geometry, mask, metrics, phantom, diagnostics, provenance, shared
    errors into `packages/geometry/`.
@@ -494,7 +496,7 @@ design-time concern.
       floor measured at zero across 7 series; values kept, now evidenced)
 - [x] `ScalarField3D` and histogram present (built, not stubbed)
 - [x] No DICOM, network, or filesystem dependency
-- [ ] Published to npm (step 6 — manual)
+- [x] Published to npm — `rt-geometry-js` 0.1.0 (2026-08-27)
 
 ### `rtstruct-js` 0.3.0
 - [ ] Zero breaking changes; geometry types re-exported

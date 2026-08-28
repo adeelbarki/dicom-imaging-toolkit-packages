@@ -12,7 +12,7 @@ a `Mask3D` built by one meets the same `GridGeometry` implementation in another.
 
 **Standard pinned (for the doc references):** DICOM PS3.3 **2026c**.
 
-**Status:** 0.1.0 — first release, extracted from `rtstruct-js` 0.2.1. See `CHANGELOG.md`.
+**Status:** published — [`rt-geometry-js`](https://www.npmjs.com/package/rt-geometry-js) 0.1.0 on npm, extracted from `rtstruct-js` 0.2.1. See `CHANGELOG.md`.
 
 ## Install
 

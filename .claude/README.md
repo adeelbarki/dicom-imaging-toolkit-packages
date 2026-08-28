@@ -1174,3 +1174,16 @@ precision from whether the decoded *value* was integral — useless, since
 axial IPP coords and IOP components land on integers regardless of how
 many digits the vendor wrote. Fixed by reading the raw DS strings and
 counting fractional digits / doing an actual re-encode round trip.
+
+## Phase B complete — rt-geometry-js 0.1.0 published (2026-08-27)
+
+Step 6 done: `npm publish` from `packages/geometry/` put `rt-geometry-js`
+0.1.0 on the public registry (`npm view rt-geometry-js` confirms).
+`prepublishOnly` (`npm run build && npm test`) gated it. Tarball: README,
+LICENSE, CHANGELOG, full `dist/` (js + d.ts), 30 files / ~23 kB, default
+(public) access — unscoped name.
+
+Phase B is now fully closed. `rtstruct-js` on npm is still 0.2.1 — its
+`peerDependencies: { rt-geometry-js: ^0.1.0 }` wiring only reaches
+consumers with the 0.3.0 release in Phase C. Next: Phase C (rtstruct-js
+0.3.0) or Phase D (CI), per the roadmap priority table.
