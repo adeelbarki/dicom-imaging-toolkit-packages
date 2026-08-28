@@ -974,3 +974,51 @@ or silent-truncation behavior). Added 8 new tests: 3 for `chunkPoints`
 (`tests/unit/port.test.ts`, new file) and 5 for ROI identity (IO-15..19 in
 `io.test.ts`). All passed first try — 120/120 total. Typecheck, build, and
 all 5 examples clean. Ready to stage and commit.
+
+## Phase A — monorepo migration (2026-08-27)
+
+Roadmap v2 §5 Phase A. `rtstruct-js` is now `packages/rtstruct/` inside the
+`dicom-imaging-toolkit-packages` npm-workspaces repo. Branch
+`chore/monorepo-migration`.
+
+- GitHub repo renamed `rtstruct-js` → `dicom-imaging-toolkit-packages`
+  first (GitHub keeps redirects), local `origin` repointed. Rename and
+  restructure are independent, so the rename went first as the cheap step.
+- **`git mv`, not a clone and not a file copy** — the roadmap allowed
+  `git subtree`/`git mv on a clone`, but a plain `git mv` on the existing
+  repo preserves history just as well (`git log --follow
+  packages/rtstruct/src/index.ts` walks back through `c791395` etc.). Every
+  *tracked* file moved under `packages/rtstruct/`; `.claude/` and
+  `.gitignore` stayed at the repo root.
+- New private root `package.json`: `workspaces: ["packages/*"]`,
+  pass-through `test`/`typecheck`/`build` (`npm run X --workspaces
+  --if-present`). The per-package `package-lock.json` was `git rm`'d and
+  `npm install` regenerated a single lockfile at the root.
+- `.gitignore` left unchanged — its `node_modules/` / `dist/` / `scratch/`
+  patterns are unanchored, so they still match under `packages/rtstruct/`.
+- `packages/rtstruct/package.json`: name stays `rtstruct-js`, version stays
+  `0.2.1` — **nothing published**. Only `repository.url` (plus a new
+  `repository.directory: "packages/rtstruct"`), `homepage`, and `bugs`
+  repointed at the monorepo.
+- `README.md` had exactly one absolute GitHub link (to `VALIDATION.md`); it
+  now 404'd on the old path, repointed at
+  `.../dicom-imaging-toolkit-packages/blob/main/packages/rtstruct/VALIDATION.md`.
+  All *relative* README links were fine — `src/` / `tests/` / `examples/` /
+  `LICENSE` all moved together.
+- `scratch/` (untracked real-DICOM working data) moved with plain `mv`
+  alongside its validation scripts.
+- `scripts/check-dependency-rule.mjs` **unchanged and still green** — it
+  resolves `src/` relative to its own file location, so it works from
+  `packages/rtstruct/` with no edit. Roadmap Phase B still rewrites it for
+  real *package* boundaries; that boundary check is not yet meaningfully
+  enforced.
+- `.claude/IMPLEMENTATION_PLAN.md` deliberately left untouched (frozen v0.1
+  spec per the roadmap's own front-matter; it contains no stale repo URLs
+  or broken links anyway).
+
+Verification: `check:deps` OK, `tsc --noEmit` clean, **120/120 tests
+green**, all run from `packages/rtstruct/` via the workspace root.
+
+Not done here — later roadmap phases: `rt-geometry-js` extraction (Phase
+B), the dependency-rule rewrite (Phase B), CI (Phase D), a root
+`README.md`, and `docs/`.
