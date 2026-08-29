@@ -408,7 +408,7 @@ RTSTRUCT only (no RTDOSE); PR 3's dose cases were downloaded fresh into
 `Vestibular-Schwannoma-SEG` expose RT dose through TCIA's unauthenticated
 API (checked all 156 collections).
 
-### Phase F — `dicom-seg-js` 0.1.0 ✅ COMPLETE (2026-08-29) — PR 1–4; validated voxel-exact vs highdicom. Publish rt-geometry-js 0.1.2 + dicom-seg-js when ready.
+### Phase F — `dicom-seg-js` 0.1.0 ✅ COMPLETE (2026-08-29) — PR 1–4 merged; `rt-geometry-js` 0.1.2 + `dicom-seg-js` 0.1.0 published, peer chain resolves.
 
 Inherits everything from Phase E.
 
@@ -707,7 +707,7 @@ design-time concern.
 - [x] `ScalarField3D` and histogram present (built, not stubbed)
 - [x] No DICOM, network, or filesystem dependency
 - [x] Published to npm — `rt-geometry-js` 0.1.0 (2026-08-27), 0.1.1 / resampling
-      (2026-08-28); `latest` is 0.1.1
+      (2026-08-28), 0.1.2 / SEG honest metrics (2026-08-29); `latest` is 0.1.2
 
 ### `rtstruct-js` 0.3.0
 - [x] Zero breaking changes; geometry types re-exported (runtime; `Diagnostic.code`
@@ -748,7 +748,7 @@ design-time concern.
 - [x] Validated voxel-exact vs `highdicom` on 3 real TCIA SEG files — 728/728 slice
       checksums identical (`VALIDATION.md`, PR 4); `FRACTIONAL_VALUES_LOOK_BINARY`
       diagnostic added
-- [ ] Published to npm — `dicom-seg-js` 0.1.0 (manual; after `rt-geometry-js` 0.1.2)
+- [x] Published to npm — `dicom-seg-js` 0.1.0 (2026-08-29); `rt-geometry-js` 0.1.2 published first, so the `^0.1.2` peer resolves
 
 ### `rt-convert-js` 0.1.0
 - [ ] Both directions, with lossiness documented and diagnosed

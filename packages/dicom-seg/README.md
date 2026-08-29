@@ -4,7 +4,7 @@ DICOM **Segmentation (SEG)** reading and writing for JavaScript/TypeScript, buil
 [`rt-geometry-js`](https://www.npmjs.com/package/rt-geometry-js). Part of the
 [DICOM imaging toolkit](https://github.com/adeelbarki/dicom-imaging-toolkit-packages).
 
-**Status:** 0.1.0 — first release. Read **and write** `BINARY` masks and `FRACTIONAL`
+**Status:** published — [`dicom-seg-js`](https://www.npmjs.com/package/dicom-seg-js) 0.1.0 on npm. Reads **and writes** `BINARY` masks and `FRACTIONAL`
 probability/occupancy fields. `LABELMAP` (PS3.3 Sup 243) lands in 0.2.0. Requires the peer
 dependency [`rt-geometry-js`](https://www.npmjs.com/package/rt-geometry-js) (`^0.1.2`);
 `npm install dicom-seg-js rt-geometry-js`.
