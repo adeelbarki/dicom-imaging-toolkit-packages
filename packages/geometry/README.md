@@ -7,12 +7,14 @@ dependency**.
 
 **Standard-agnostic by design.** A `GridGeometry` may come from a CT/MR series, an AI
 model, a resampling step, NIfTI, or a synthetic phantom. Domain packages
-(`rtstruct-js`, and later `rtdose-js` / `dicom-seg-js`) depend on this as a **peer**, so
-a `Mask3D` built by one meets the same `GridGeometry` implementation in another.
+(`rtstruct-js`, `rtdose-js`, `dicom-seg-js`) depend on this as a **peer**, so a `Mask3D`
+built by one meets the same `GridGeometry` implementation in another.
 
 **Standard pinned (for the doc references):** DICOM PS3.3 **2026c**.
 
-**Status:** published — [`rt-geometry-js`](https://www.npmjs.com/package/rt-geometry-js) 0.1.2 on npm, extracted from `rtstruct-js` 0.2.1. See `CHANGELOG.md`.
+**Status:** [`rt-geometry-js`](https://www.npmjs.com/package/rt-geometry-js) on npm —
+**0.1.1** is the latest published; **0.1.2** (this repo, see `CHANGELOG.md`) publishes
+alongside `dicom-seg-js` 0.1.0, which peers `^0.1.2`. Extracted from `rtstruct-js` 0.2.1.
 
 ## Install
 

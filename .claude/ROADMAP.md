@@ -662,10 +662,16 @@ against a reference throughout rather than at the end.
   `packages/rtdose/VALIDATION.md` (194/195 comparisons within tolerance).
   Harness: `packages/rtdose/scripts/validation/`. Follow-up: non-Varian
   planning systems (NBIA-login-gated on TCIA).
-- **SEG:** round-trip real FRACTIONAL and BINARY SEG files; compare
-  against `pydicom-seg` / `highdicom` on the same inputs. Record which
-  fractional types appear in the wild, the way the encoding distribution
-  was recorded for RTSTRUCT holes.
+- **SEG:** ✅ done (Phase F PR 4, 2026-08-29). `dicom-seg-js` vs `highdicom`
+  0.28 on 3 real TCIA SEG files (C4KC-KiTS 2-seg BINARY, NSCLC-Radiomics
+  6-seg BINARY, ISPY1 FRACTIONAL/OCCUPANCY) — **voxel-exact, 728/728
+  per-slice checksums identical**. `pydicom-seg` was unusable (needs
+  `pydicom<2.4`). Fractional-types-in-the-wild recorded in
+  `packages/dicom-seg/VALIDATION.md` / `docs/FRACTIONAL-SEG.md` §4:
+  FRACTIONAL SEG is rare in TCIA, mostly breast MRI, and the one sampled
+  was a binary mask mislabelled as OCCUPANCY (caught by the new
+  `FRACTIONAL_VALUES_LOOK_BINARY` diagnostic). Harness:
+  `packages/dicom-seg/scripts/validation/`.
 - Carry existing RTSTRUCT evidence into the same document: four-vendor
   round-trip results, the encoding distribution (Elekta skull 92%
   keyhole, Plastimatch lungs 4–6%, three vendors 0%, XOR unobserved

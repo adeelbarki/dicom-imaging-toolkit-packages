@@ -1,6 +1,6 @@
 # dicom-seg-js
 
-DICOM **Segmentation (SEG)** reading for JavaScript/TypeScript, built on
+DICOM **Segmentation (SEG)** reading and writing for JavaScript/TypeScript, built on
 [`rt-geometry-js`](https://www.npmjs.com/package/rt-geometry-js). Part of the
 [DICOM imaging toolkit](https://github.com/adeelbarki/dicom-imaging-toolkit-packages).
 
@@ -99,7 +99,7 @@ must be on the same grid (`GridMismatchError` otherwise). One frame is written p
 |---|---|
 | `SegmentationType` (0062,0001) | `BINARY` → `mask(n)`; `FRACTIONAL` → `field(n)` / `rawField(n)`. `LABELMAP` → `UnsupportedSegmentationTypeError` (0.2.0) |
 | `SegmentSequence` (0062,0002) | number, label, algorithm type/name, coded `SegmentedPropertyCategory` / `Type` / `TypeModifier`, `TrackingID` / `TrackingUID` |
-| `SegmentationFractionalType` (0062,0010) | surfaced on `seg.fractionalType`; **never defaulted** — absent is `undefined` + a diagnostic |
+| `SegmentationFractionalType` (0062,0010) | surfaced on `seg.fractionalType`; **never defaulted** — absent is `undefined` + a diagnostic. A field whose non-zero values are ≥ 98% at the max raises `FRACTIONAL_VALUES_LOOK_BINARY` (a binary mask stored as FRACTIONAL) |
 | `MaximumFractionalValue` (0062,000E) | used to rescale `field(n)` to 0..1; `rawField(n)` keeps the integers. Absent → assumed 255 + a diagnostic |
 | `SegmentsOverlap` (0062,0013) | surfaced on `seg.segmentsOverlap`; `YES` also raises a diagnostic |
 | Per-Frame / Shared Functional Groups | plane positions, orientation, pixel spacing → one `GridGeometry` spanning every frame position |
