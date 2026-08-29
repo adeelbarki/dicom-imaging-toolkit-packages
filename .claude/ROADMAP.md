@@ -408,7 +408,7 @@ RTSTRUCT only (no RTDOSE); PR 3's dose cases were downloaded fresh into
 `Vestibular-Schwannoma-SEG` expose RT dose through TCIA's unauthenticated
 API (checked all 156 collections).
 
-### Phase F — `dicom-seg-js` 0.1.0 — in progress (2026-08-28)
+### Phase F — `dicom-seg-js` 0.1.0 — in progress (PR 1 + PR 2 ✅ 2026-08-29; PR 3 write, PR 4 validation open)
 
 Inherits everything from Phase E.
 
@@ -442,20 +442,37 @@ sampled across thresholds, ascending `{ threshold, volumeMm3, volumeFraction }[]
 histogram fns. 5 tests (HIST-09..13). Additive → 0.1.2, `^0.1.0` covers it so `rtstruct-js`
 / `rtdose-js` need no change. 95 geometry + 64 rtstruct + 24 rtdose = 183 tests green.
 
-**PR 2 (next) — `packages/dicom-seg/` scaffold + BINARY/FRACTIONAL read:**
-`readSeg(bytes)` → parse Per-Frame/Shared Functional Groups into one `GridGeometry`
-spanning all frame positions; `seg.segments()` (number, label, coded
-`SegmentedPropertyCategory`/`Type`, algorithm type, `SegmentationType`,
-`SegmentAlgorithmName`); `seg.mask(n)` (BINARY, via `dcmjs.data.BitArray.unpack`);
-`seg.field(n)` (FRACTIONAL — rescaled `x / MaximumFractionalValue` to 0..1 **plus** raw
-integer access; `SegmentationFractionalType` PROBABILITY|OCCUPANCY exposed, never
-defaulted); `SegmentsOverlap` surfaced; diagnostics (bimodal-OCCUPANCY-looks-thresholded,
-missing `MaximumFractionalValue`, sparse frames). Peer `rt-geometry-js ^0.1.2`. `dcmjs`
-the only runtime dep, `createRequire` in one `src/dicom/port.ts`.
+**PR 2 ✅ — `packages/dicom-seg/` scaffold + BINARY/FRACTIONAL read (branch
+`feat/dicom-seg-read`):** scaffolded on the rtdose pattern (peer `rt-geometry-js ^0.1.2`,
+`paths` alias + `paths: {}` build, vitest alias, `dcmjs` the only runtime dep via
+`createRequire` in one `src/dicom/port.ts`).
+- `readSeg(bytes)` / `Segmentation.fromDicom` — parse Per-Frame/Shared Functional Groups
+  into one `GridGeometry` spanning every distinct frame position (planes sorted along the
+  normal); each frame mapped to its plane index by projected position.
+- `seg.segments()` — number, label, `SegmentAlgorithmType`/`Name`, coded
+  `SegmentedPropertyCategory`/`Type`/`TypeModifier`, `TrackingID`/`TrackingUID`, per-segment
+  frame count.
+- `seg.mask(n)` (BINARY) — `dcmjs.data.BitArray.unpack`; continuous bitstream is the
+  default, the byte-aligned-per-frame variant detected + `BINARY_FRAMES_BYTE_ALIGNED`
+  diagnostic. `seg.field(n)` / `seg.rawField(n)` (FRACTIONAL) — `x / MaximumFractionalValue`
+  to 0..1 plus raw. `seg.support(n)` (footprint mask, for the honest-metric `mask` arg).
+  `seg.sampleConfidence(n, point)` (§7.3, = `sampleFieldAt` on the field).
+- `fractionalType` **never defaulted** (absent → `undefined` + `FRACTIONAL_TYPE_ABSENT`);
+  `MaximumFractionalValue` absent → 255 + diagnostic; `SegmentsOverlap: YES` surfaced +
+  diagnostic. `mask()`↔`field()` type confusion throws `SegmentationTypeMismatchError`
+  (no implicit threshold). LABELMAP → `UnsupportedSegmentationTypeError` (→ 0.2.0).
+- Errors: `NotSegmentationError`, `MalformedSegmentationError`,
+  `UnsupportedSegmentationTypeError`, `SegmentationTypeMismatchError`.
+- `docs/FRACTIONAL-SEG.md` written now (§7.1 PROBABILITY vs OCCUPANCY, §7.2 calibration
+  caveat, §7.3 display guidance); §4 validation section is a stub for PR 4.
+- 20 tests (PARSE-01..10, SEG-01..10). 203 total (95 geometry + 64 rtstruct + 24 rtdose +
+  20 seg). Typecheck + build clean; bare `rt-geometry-js` specifier in `dist/`.
+- The bimodal-OCCUPANCY-looks-thresholded diagnostic is **deferred to PR 4** (lands with
+  the real-data distribution work).
 
-**PR 3 — `writeSeg` BINARY/FRACTIONAL:** fractional type **required** on write (no
-default, §7.1); round-trip tests (mask → writeSeg → readSeg → mask, `voxelDisagreement
-=== 0`).
+**PR 3 (next) — `writeSeg` BINARY/FRACTIONAL:** promote the `port.ts` fixture builder to
+the public `writeSeg`; fractional type **required** on write (no default, §7.1);
+round-trip tests (mask → writeSeg → readSeg → mask, `voxelDisagreement === 0`).
 
 **PR 4 — `docs/FRACTIONAL-SEG.md` + validation** vs `pydicom-seg` / `highdicom` on real
 FRACTIONAL + BINARY SEG from TCIA; record which fractional types appear in the wild (the
@@ -679,11 +696,17 @@ design-time concern.
       same day, so a fresh install resolves cleanly
 
 ### `dicom-seg-js` 0.1.0
-- [ ] BINARY + FRACTIONAL read (**LABELMAP moved to 0.2.0** — decision 2026-08-28,
-      Phase F notes: little real-world test data yet)
-- [ ] BINARY and FRACTIONAL write
+- [x] BINARY + FRACTIONAL read (`readSeg`, PR 2). **LABELMAP moved to 0.2.0** (decision
+      2026-08-28 — little real-world test data yet)
+- [ ] BINARY and FRACTIONAL write (PR 3)
 - [x] Honest metrics in the shared core — `meanValue` / `thresholdSensitivity` shipped in
       `rt-geometry-js` 0.1.2 (Phase F PR 1), joining the existing `volumeAboveThreshold`
+- [x] `SegmentationFractionalType` surfaced, never defaulted (PR 2)
+- [x] `MaximumFractionalValue` rescaling in `field()`, raw integers in `rawField()` (PR 2)
+- [x] `SegmentsOverlap` surfaced (PR 2)
+- [~] Calibration caveat in `FRACTIONAL-SEG.md` — §1–3 written (PR 2); §4 validation table
+      pending (PR 4)
+- [x] No "accuracy" / "% correct" metric anywhere in the API (PR 2)
 - [ ] Fractional type required on write, preserved on read
 - [ ] `MaximumFractionalValue` rescaling, with raw access retained
 - [ ] `SegmentsOverlap` surfaced
