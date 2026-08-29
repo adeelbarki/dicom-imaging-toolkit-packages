@@ -511,7 +511,7 @@ order both sides) keyed by physical z, `compare.mjs` diffs them.
 `dicom-seg-js` is read+write, validated. Publish order when it ships: `rt-geometry-js`
 0.1.2 (only 0.1.1 on npm) FIRST, then `dicom-seg-js`.
 
-### Phase G — `rt-convert-js`
+### Phase G — `rt-convert-js` 🚧 IN PROGRESS
 
 ```
 segToRtstruct(seg, segmentNumber, opts)
@@ -522,6 +522,21 @@ The lossy directions must be documented and diagnosed: RTSTRUCT cannot
 represent fractional data (a threshold must be chosen and recorded), and
 SEG→RTSTRUCT is a vectorization, with all the quantization already
 understood from the existing round-trip work.
+
+**4-PR plan.** PR 1 (`feat/rt-convert-scaffold`) — `rtstruct-js` 0.3.1
+(additive: `createFromMask` now carries `interpretedType` /
+`referencedFrameOfReferenceUID`), scaffold `packages/convert/`
+(`rt-convert-js` 0.1.0, peers `rt-geometry-js ^0.1.2` + `rtstruct-js
+^0.3.1` + `dicom-seg-js ^0.1.0` — the only two-domain-peer package), and
+`rtstructToSeg` (the voxel-copy direction; `provenance.lossySteps` empty).
+Every conversion returns `{ bytes, provenance }`; `ConversionProvenance`
+lists each non-round-tripping step. After PR 1 merges, publish
+`rtstruct-js` 0.3.1 (dep-first discipline). PR 2 — `segToRtstruct` BINARY
++ `mask-vectorization` lossy step. PR 3 — `segToRtstruct` FRACTIONAL:
+`opts.threshold` required (`MissingThresholdError`), `fractional-threshold`
+step records threshold/scale/type/before+after counts. PR 4 — README /
+CHANGELOG / `docs/CONVERSION.md` / validation vs real TCIA SEG+RTSTRUCT,
+then publish `rt-convert-js` 0.1.0.
 
 ---
 
@@ -751,8 +766,19 @@ design-time concern.
 - [x] Published to npm — `dicom-seg-js` 0.1.0 (2026-08-29); `rt-geometry-js` 0.1.2 published first, so the `^0.1.2` peer resolves
 
 ### `rt-convert-js` 0.1.0
-- [ ] Both directions, with lossiness documented and diagnosed
-- [ ] Threshold recorded in provenance on any fractional→binary step
+- [x] Package scaffolded (PR 1) — `packages/convert/`, peers on all three toolkit
+      packages, `check:deps` recognises it as the one two-domain-peer package
+- [x] `rtstruct-js` 0.3.1 (PR 1) — `createFromMask` carries `interpretedType` /
+      `referencedFrameOfReferenceUID`, so SEG→RTSTRUCT keeps type + series association
+- [x] `rtstructToSeg(rt, roi, opts)` (PR 1) — RTSTRUCT ROI → `BINARY` SEG, voxel-for-voxel
+      identical to the loaded ROI mask; `{ bytes, provenance }` return shape;
+      `ConversionProvenance` + `LossyStep` types
+- [ ] `segToRtstruct` BINARY (PR 2) — `mask-vectorization` lossy step
+- [ ] `segToRtstruct` FRACTIONAL (PR 3) — `opts.threshold` required, `fractional-threshold`
+      step records the cut
+- [ ] Both directions' lossiness documented (`docs/CONVERSION.md`) and validated against
+      real TCIA SEG + RTSTRUCT (PR 4)
+- [ ] Published to npm — `rtstruct-js` 0.3.1 first (PR 1 dep), then `rt-convert-js` 0.1.0 (PR 4)
 
 ---
 

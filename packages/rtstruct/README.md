@@ -14,9 +14,11 @@ Round-trip volume fidelity is verified separately, against a torus phantom's
 closed-form volume.
 
 **Status:** published — [`rtstruct-js`](https://www.npmjs.com/package/rtstruct-js)
-on npm, v0.3.0. Requires the peer dependency
+on npm, v0.3.1. Requires the peer dependency
 [`rt-geometry-js`](https://www.npmjs.com/package/rt-geometry-js) (`^0.1.0`);
-`npm install rtstruct-js rt-geometry-js`. 144 tests green across both packages.
+`npm install rtstruct-js rt-geometry-js`. 0.3.1 is additive — `createFromMask`
+now carries `interpretedType` / `referencedFrameOfReferenceUID` through to the
+written file (for `rt-convert-js`). 144 tests green across both packages.
 
 **Validated against real DICOM files**, not just phantoms — 5 vendors/tools, real
 keyhole/nested contour distributions, real round-trip fidelity. See

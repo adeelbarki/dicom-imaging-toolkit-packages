@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "declaration": true,
+    "outDir": "dist",
+    "rootDir": "src",
+    // `paths` in the base config maps the workspace peers to their source for
+    // typecheck/tests. The published build must resolve them as real dependencies (their
+    // built dist/) and keep the bare specifiers in the emitted JS — so clear the mapping.
+    "paths": {}
+  },
+  "include": ["src"]
+}

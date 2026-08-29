@@ -1674,3 +1674,68 @@ URL (not in the tarball).
 31 seg tests (PARSE-01..11, SEG-01..10, RT-01..10). Full gate green.
 `dicom-seg-js` 0.1.0 is read+write+validated. Publish: `rt-geometry-js`
 0.1.2 FIRST (only 0.1.1 on npm), then `dicom-seg-js`.
+
+## Root README added (2026-08-29)
+
+`README.md` at the repo root (there wasn't one). Summarises the four
+packages + versions, the geometry-core-as-peer dependency rule (with the
+ASCII graph + the `check:deps` pointer), the phantom-vs-real-DICOM
+validation split (links all three `VALIDATION.md`s with headline
+numbers), repo layout, and the `npm ci` / `build` / `test` workflow.
+Also fixed a stale `packages/dicom-seg/package.json` `description` —
+"reading" → "reading and writing" (0.1.0 does both). PR #17, merged.
+
+## Phase G PR 1 — rt-convert-js scaffold + rtstructToSeg (2026-08-29)
+
+Branch `feat/rt-convert-scaffold`. Two parts.
+
+**`rtstruct-js` 0.3.1 (additive, non-breaking).** `CreateFromMaskParams`
+gained `interpretedType?` + `referencedFrameOfReferenceUID?`, threaded
+into the existing `writeRTStruct` call (which already supported both
+per-`WriteRoi` — they just weren't reachable from `createFromMask`).
+Without them a SEG→RTSTRUCT conversion emits an ROI with a generic type
+and no frame of reference, so it can't be associated with an image
+series. Tests IO-20/21. Version 0.3.0 → 0.3.1, CHANGELOG + README status
+line. **Publish 0.3.1 after this PR merges, before `rt-convert-js`.**
+
+**`packages/convert/` scaffolded.** `rt-convert-js` 0.1.0. Peers on all
+three toolkit packages (`rt-geometry-js ^0.1.2`, `rtstruct-js ^0.3.1`,
+`dicom-seg-js ^0.1.0`) — the only two-domain-peer package;
+`check-dependency-rule.mjs` already classified `rt-convert-js` as
+"convert" (multi-domain OK, must stay a leaf), no script change. Same
+config pattern as the others: `tsconfig` `paths` → peer source for
+typecheck/tests, `tsconfig.build.json` `paths: {}` so emitted JS keeps
+bare specifiers (verified: `dist/rtstruct-to-seg.js` imports
+`"dicom-seg-js"`), vitest aliases all three peers to source, `prebuild`
+builds geometry + rtstruct + dicom-seg dist first. Does **not** re-export
+the domain packages — they each re-export all of `rt-geometry-js`, so
+re-exporting both would collide; callers import `RTStruct` / `readSeg`
+directly.
+
+**`rtstructToSeg(rt, roi, options?)`** — one RTSTRUCT ROI → single-segment
+`BINARY` SEG on the grid the RTSTRUCT was loaded onto. `RTStruct.load`
+already rasterized the contours; this writes exactly those voxels, so
+`voxelDisagreement(seg.mask(1), rt.getMask(roi)) === 0` and
+`provenance.lossySteps` is empty (the mask→contour→mask loss, if any,
+happened in `rtstruct-js` before this call). Options: `segmentNumber` /
+`segmentLabel` / `algorithmType` (default `SEMIAUTOMATIC` — RT contours
+are usually clinician-drawn; `AUTOMATIC` would overclaim) / coded
+`category` + `propertyType` (no auto-map from the free-text
+`RTROIInterpretedType`) / `frameOfReferenceUID` / `contentLabel`. Empty
+ROI → converts fine, note added, no throw. Unknown ROI → `RangeError`
+from `rtstruct-js`, not wrapped.
+
+**Return shape** `{ bytes, provenance }`. `ConversionProvenance`:
+direction, `source`, `grid` summary, `voxelCount`, `lossySteps` (typed:
+`fractional-threshold` | `mask-vectorization`), `notes`, `library` +
+`libraryVersion` (`src/version.ts`, asserted == package.json in
+CONV-VER-01). Errors: `ConversionError` base, `MissingThresholdError`,
+`SegmentNotFoundError` (latter two used in PR 2/3).
+
+Gotcha: dcmjs silently mangles a non-numeric `FrameOfReferenceUID` (test
+first used `...conv.test` → came back `...` truncated). Tests use valid
+numeric UIDs.
+
+8 convert tests (CONV-RS-01..07 + CONV-VER-01). Full gate green: 224
+tests across 5 packages. `docs/CONVERSION.md` + README are PR-1 stubs
+describing the intended `segToRtstruct` contract; fleshed out in PR 4.
