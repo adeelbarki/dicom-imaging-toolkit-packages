@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.1.2] - 2026-08-28
+
+Additive — no breaking change, `^0.1.0` covers it.
+
+### New
+
+- `meanValue(field, mask, tolerance?)` — volume-weighted mean of a `ScalarField3D` over a
+  `Mask3D` (`Σ(vᵢ·xᵢ) / Σvᵢ`). This is `dicom-seg-js`'s `meanConfidence` for a FRACTIONAL
+  SEG probability field, and mean dose for a dose field.
+- `thresholdSensitivity(field, mask, thresholds, tolerance?)` — `volumeAboveThreshold`
+  sampled across a list of thresholds in one pass, returned ascending as
+  `{ threshold, volumeMm3, volumeFraction }[]`. Shows how much a FRACTIONAL segment's
+  volume depends on where the confidence cut is placed (roadmap §7.2).
+
+Both throw `GridMismatchError` off-grid and `RangeError` for an empty mask, matching the
+existing histogram functions. Built here (not in `dicom-seg-js`) so the histogram/DVH
+machinery stays in one place (roadmap §3).
+
 ## [0.1.1] - 2026-08-28
 
 Additive — no breaking change, `^0.1.0` covers it.
