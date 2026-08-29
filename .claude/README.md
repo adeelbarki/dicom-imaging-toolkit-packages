@@ -1479,3 +1479,33 @@ ascending-from-0 (no reorder/offset diagnostics fired), `DoseUnits GY`.
 VALIDATION.md agreement table + findings populated. `rtdose-js` 0.1.0 exit
 criteria all met except the manual npm publish. Still open for a later
 pass: non-Varian dose (needs NBIA login), `DoseSummationType BEAM`.
+
+## Phase F PR 1 — rt-geometry-js honest metrics, 0.1.2 (2026-08-28)
+
+Branch `feat/geometry-seg-metrics`. Phase F decisions (with the user):
+LABELMAP deferred to `dicom-seg-js` 0.2.0 (BINARY + FRACTIONAL only in
+0.1.0 — LABELMAP has little real-world test data); the §7.2 honest
+quantities go in the **core**, not the domain package, keeping the
+histogram/DVH machinery in one place (§3); `readSeg(bytes)` will take no
+companion geometry (SEG is spatially self-describing).
+
+`src/histogram.ts` gained two functions, same `collectSamples` +
+`GridMismatchError`/empty-mask-`RangeError` contract as the rest of the
+file:
+- `meanValue(field, mask, tolerance?)` — volume-weighted mean
+  `Σ(vᵢ·xᵢ)/Σvᵢ`. This is `dicom-seg-js`'s `meanConfidence` for a
+  probability field, mean dose for a dose field.
+- `thresholdSensitivity(field, mask, thresholds, tolerance?)` —
+  `volumeAboveThreshold` sampled across a threshold list in one pass over
+  the masked voxels, returned ascending as
+  `{ threshold, volumeMm3, volumeFraction }[]`. Shows how much a FRACTIONAL
+  segment's volume depends on where the confidence cut sits.
+
+5 tests (HIST-09..13). Additive → **0.1.2** (not 0.2.0): `^0.1.0` covers
+it, so `rtstruct-js` (`^0.1.0`) and `rtdose-js` (`^0.1.1`) need nothing.
+`dicom-seg-js` will peer `^0.1.2`. 95 geometry + 64 rtstruct + 24 rtdose =
+183 tests green; typecheck + build clean; `meanValue`/`thresholdSensitivity`
+in `dist/histogram.d.ts`.
+
+Publish-order reminder (learned in Phase E): when `dicom-seg-js` ships,
+publish `rt-geometry-js` 0.1.2 **first**, then the domain package.

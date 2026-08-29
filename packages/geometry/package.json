@@ -1,6 +1,6 @@
 {
   "name": "rt-geometry-js",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "type": "module",
   "description": "Shared geometry core for DICOM imaging toolkits: GridGeometry, Mask3D, ScalarField3D, resampling-ready histograms, analytic phantoms, and comparison metrics. No DICOM, network, or filesystem dependency.",
   "keywords": [

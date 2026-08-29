@@ -181,3 +181,64 @@ export function valueAtVolumeFraction(
   }
   return last;
 }
+
+/**
+ * Volume-weighted mean of `field` over `mask` — `Σ(vᵢ·xᵢ) / Σvᵢ`, so irregular plane
+ * spacing is handled. For a FRACTIONAL DICOM SEG confidence field this is the mean
+ * confidence inside a segment (dicom-seg-js's `meanConfidence`); for a dose field it is the
+ * mean dose. Throws `GridMismatchError` unless the field and mask share a grid, and
+ * `RangeError` for a mask with no occupied voxels.
+ */
+export function meanValue(field: ScalarField3D, mask: Mask3D, tolerance?: GridTolerance): number {
+  const samples = collectSamples(field, mask, tolerance);
+  if (samples.length === 0) {
+    throw new RangeError("cannot compute a mean over a mask with no occupied voxels");
+  }
+  let weighted = 0;
+  let volume = 0;
+  for (const s of samples) {
+    weighted += s.value * s.volumeMm3;
+    volume += s.volumeMm3;
+  }
+  return weighted / volume;
+}
+
+export interface ThresholdSensitivityPoint {
+  readonly threshold: number;
+  /** Masked volume (mm³) where `field >= threshold`. */
+  readonly volumeMm3: number;
+  /** `volumeMm3` divided by the total masked volume, in [0, 1]. */
+  readonly volumeFraction: number;
+}
+
+/**
+ * How the above-threshold volume moves as the threshold moves — `volumeAboveThreshold`
+ * evaluated across `thresholds` in one pass over the masked voxels. For a FRACTIONAL SEG
+ * this answers "how much does the segmented volume depend on where the confidence cut is
+ * placed?": a nearly flat curve means the choice barely matters, a steep one means it
+ * dominates the result. Points are returned ascending by threshold. Throws
+ * `GridMismatchError` unless the field and mask share a grid, and `RangeError` for an empty
+ * `thresholds` list or a mask with no occupied voxels.
+ */
+export function thresholdSensitivity(
+  field: ScalarField3D,
+  mask: Mask3D,
+  thresholds: readonly number[],
+  tolerance?: GridTolerance,
+): ThresholdSensitivityPoint[] {
+  if (thresholds.length === 0) {
+    throw new RangeError("thresholds must be a non-empty list");
+  }
+  const samples = collectSamples(field, mask, tolerance);
+  if (samples.length === 0) {
+    throw new RangeError("cannot compute threshold sensitivity over a mask with no occupied voxels");
+  }
+  const total = totalVolume(samples);
+  return [...thresholds]
+    .sort((a, b) => a - b)
+    .map((threshold) => {
+      let volume = 0;
+      for (const s of samples) if (s.value >= threshold) volume += s.volumeMm3;
+      return { threshold, volumeMm3: volume, volumeFraction: total > 0 ? volume / total : 0 };
+    });
+}

@@ -408,19 +408,60 @@ RTSTRUCT only (no RTDOSE); PR 3's dose cases were downloaded fresh into
 `Vestibular-Schwannoma-SEG` expose RT dose through TCIA's unauthenticated
 API (checked all 156 collections).
 
-### Phase F — `dicom-seg-js` 0.1.0
+### Phase F — `dicom-seg-js` 0.1.0 — in progress (2026-08-28)
 
 Inherits everything from Phase E.
 
 ```
-readSeg(bytes)              BINARY | FRACTIONAL | LABELMAP
+readSeg(bytes)              BINARY | FRACTIONAL   (LABELMAP -> 0.2.0)
 seg.segments()              segment list with coded meanings
-seg.mask(segmentNumber)     Mask3D          (BINARY, LABELMAP)
+seg.mask(segmentNumber)     Mask3D          (BINARY)
 seg.field(segmentNumber)    ScalarField3D   (FRACTIONAL, rescaled to 0..1)
 writeSeg({ ... })           BINARY or FRACTIONAL out
 ```
 
 See §7 for the fractional-specific requirements.
+
+**Decisions (2026-08-28):**
+- **LABELMAP deferred to 0.2.0.** BINARY + FRACTIONAL are the mainstream types and
+  have real test data; LABELMAP (Sup 243, 2023) gets a focused PR once files exist to
+  validate against. This narrows the §11 0.1.0 exit criteria — updated there.
+- **Honest metrics (`meanConfidence` / `thresholdSensitivity`) live in `rt-geometry-js`,
+  not `dicom-seg-js`** — keeps the histogram/DVH machinery in one place (§3). Shipped as
+  `rt-geometry-js` 0.1.2 (PR 1). `dicom-seg-js` peers `^0.1.2`.
+- **`readSeg(bytes)` takes no companion geometry.** SEG is self-describing spatially (its
+  own `GridGeometry` is built from the Per-Frame / Shared Functional Groups). SEG↔CT
+  grid crossing is the caller's `resampleMask` / `resampleField` call (§7.4).
+- 3 PRs for the package, after the geometry primitive.
+
+**PR 1 ✅ — `rt-geometry-js` 0.1.2 (branch `feat/geometry-seg-metrics`):**
+`meanValue(field, mask, tol?)` (volume-weighted mean — `meanConfidence` for a probability
+field) and `thresholdSensitivity(field, mask, thresholds, tol?)` (`volumeAboveThreshold`
+sampled across thresholds, ascending `{ threshold, volumeMm3, volumeFraction }[]`) added to
+`histogram.ts`. Same `GridMismatchError` / empty-mask `RangeError` contract as the other
+histogram fns. 5 tests (HIST-09..13). Additive → 0.1.2, `^0.1.0` covers it so `rtstruct-js`
+/ `rtdose-js` need no change. 95 geometry + 64 rtstruct + 24 rtdose = 183 tests green.
+
+**PR 2 (next) — `packages/dicom-seg/` scaffold + BINARY/FRACTIONAL read:**
+`readSeg(bytes)` → parse Per-Frame/Shared Functional Groups into one `GridGeometry`
+spanning all frame positions; `seg.segments()` (number, label, coded
+`SegmentedPropertyCategory`/`Type`, algorithm type, `SegmentationType`,
+`SegmentAlgorithmName`); `seg.mask(n)` (BINARY, via `dcmjs.data.BitArray.unpack`);
+`seg.field(n)` (FRACTIONAL — rescaled `x / MaximumFractionalValue` to 0..1 **plus** raw
+integer access; `SegmentationFractionalType` PROBABILITY|OCCUPANCY exposed, never
+defaulted); `SegmentsOverlap` surfaced; diagnostics (bimodal-OCCUPANCY-looks-thresholded,
+missing `MaximumFractionalValue`, sparse frames). Peer `rt-geometry-js ^0.1.2`. `dcmjs`
+the only runtime dep, `createRequire` in one `src/dicom/port.ts`.
+
+**PR 3 — `writeSeg` BINARY/FRACTIONAL:** fractional type **required** on write (no
+default, §7.1); round-trip tests (mask → writeSeg → readSeg → mask, `voxelDisagreement
+=== 0`).
+
+**PR 4 — `docs/FRACTIONAL-SEG.md` + validation** vs `pydicom-seg` / `highdicom` on real
+FRACTIONAL + BINARY SEG from TCIA; record which fractional types appear in the wild (the
+way the RTSTRUCT hole-encoding distribution was recorded). `meanConfidence` /
+`volumeAboveThreshold` / `thresholdSensitivity` the only exposed quantities — no
+"accuracy" / "% correct" anywhere (§7.2).
 
 ### Phase G — `rt-convert-js`
 
@@ -638,8 +679,11 @@ design-time concern.
       same day, so a fresh install resolves cleanly
 
 ### `dicom-seg-js` 0.1.0
-- [ ] BINARY, FRACTIONAL, LABELMAP read
+- [ ] BINARY + FRACTIONAL read (**LABELMAP moved to 0.2.0** — decision 2026-08-28,
+      Phase F notes: little real-world test data yet)
 - [ ] BINARY and FRACTIONAL write
+- [x] Honest metrics in the shared core — `meanValue` / `thresholdSensitivity` shipped in
+      `rt-geometry-js` 0.1.2 (Phase F PR 1), joining the existing `volumeAboveThreshold`
 - [ ] Fractional type required on write, preserved on read
 - [ ] `MaximumFractionalValue` rescaling, with raw access retained
 - [ ] `SegmentsOverlap` surfaced
