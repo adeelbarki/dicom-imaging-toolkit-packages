@@ -1,16 +1,16 @@
 {
-  "name": "rtstruct-js",
-  "version": "0.3.1",
+  "name": "rt-convert-js",
+  "version": "0.1.0",
   "type": "module",
-  "description": "DICOM RT Structure Set reading and writing, validated against analytic phantoms.",
+  "description": "Convert between DICOM RT Structure Sets and DICOM Segmentation, with every lossy step recorded in provenance. Built on rt-geometry-js, rtstruct-js, and dicom-seg-js.",
   "keywords": [
     "dicom",
     "rtstruct",
-    "rt-struct",
+    "dicom-seg",
+    "segmentation",
+    "conversion",
     "radiotherapy",
     "medical-imaging",
-    "contour",
-    "segmentation",
     "dcmjs"
   ],
   "license": "MIT",
@@ -18,9 +18,9 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/adeelbarki/dicom-imaging-toolkit-packages.git",
-    "directory": "packages/rtstruct"
+    "directory": "packages/convert"
   },
-  "homepage": "https://github.com/adeelbarki/dicom-imaging-toolkit-packages/tree/main/packages/rtstruct#readme",
+  "homepage": "https://github.com/adeelbarki/dicom-imaging-toolkit-packages/tree/main/packages/convert#readme",
   "bugs": {
     "url": "https://github.com/adeelbarki/dicom-imaging-toolkit-packages/issues"
   },
@@ -34,7 +34,8 @@
   },
   "files": [
     "dist",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "docs/CONVERSION.md"
   ],
   "engines": {
     "node": ">=20"
@@ -46,19 +47,20 @@
     "typecheck": "tsc --noEmit",
     "check:deps": "node ../../scripts/check-dependency-rule.mjs",
     "build": "tsc -p tsconfig.build.json",
-    "prebuild": "npm run build --workspace rt-geometry-js",
+    "prebuild": "npm run build --workspace rt-geometry-js --workspace rtstruct-js --workspace dicom-seg-js",
     "prepublishOnly": "npm run build && npm test"
   },
   "peerDependencies": {
-    "rt-geometry-js": "^0.1.0"
+    "dicom-seg-js": "^0.1.0",
+    "rt-geometry-js": "^0.1.2",
+    "rtstruct-js": "^0.3.1"
   },
   "devDependencies": {
     "@types/node": "^26.2.0",
-    "rt-geometry-js": "^0.1.0",
+    "dicom-seg-js": "^0.1.0",
+    "rt-geometry-js": "^0.1.2",
+    "rtstruct-js": "^0.3.1",
     "typescript": "^5.6.3",
     "vitest": "^2.1.4"
-  },
-  "dependencies": {
-    "dcmjs": "^0.52.0"
   }
 }

@@ -30,6 +30,14 @@ export interface LoadParams extends LoadOptions {
 export interface CreateFromMaskParams {
   readonly mask: Mask3D;
   readonly name: string;
+  /** RTROIInterpretedType (3006,00A4) for the written ROI. Omitted → `writeRTStruct`
+   *  defaults it to `"ORGAN"` (IO-08). Pass this to carry a known type across a
+   *  conversion (e.g. a SEG segment's anatomical category). */
+  readonly interpretedType?: string;
+  /** ReferencedFrameOfReferenceUID (3006,0024) for the written ROI. Omitted → the file
+   *  declares no frame of reference, and a later `load()` cannot associate it with an
+   *  image series. Pass the source object's frame of reference to keep that link. */
+  readonly referencedFrameOfReferenceUID?: string;
 }
 
 interface StoredRoi {
@@ -111,7 +119,18 @@ export class RTStruct {
   }
 
   static async createFromMask(params: CreateFromMaskParams): Promise<ArrayBuffer> {
-    return writeRTStruct({ rois: [{ name: params.name, contours: vectorize(params.mask) }] });
+    return writeRTStruct({
+      rois: [
+        {
+          name: params.name,
+          contours: vectorize(params.mask),
+          ...(params.interpretedType !== undefined ? { interpretedType: params.interpretedType } : {}),
+          ...(params.referencedFrameOfReferenceUID !== undefined
+            ? { referencedFrameOfReferenceUID: params.referencedFrameOfReferenceUID }
+            : {}),
+        },
+      ],
+    });
   }
 
   /** Resolves either identifier: a number looks up ROINumber directly (unambiguous by

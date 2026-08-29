@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2022"],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "paths": {
+      "rt-geometry-js": ["../geometry/src/index.ts"],
+      "rtstruct-js": ["../rtstruct/src/index.ts"],
+      "dicom-seg-js": ["../dicom-seg/src/index.ts"]
+    }
+  },
+  "include": ["src", "tests", "scripts"]
+}

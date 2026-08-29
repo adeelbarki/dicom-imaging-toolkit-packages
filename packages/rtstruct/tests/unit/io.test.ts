@@ -160,4 +160,27 @@ describe("IO: conservative writing", () => {
     const rt = await RTStruct.load({ rtstruct: bytes, geometry: g() });
     expect(rt.roi("AI Tumor").interpretedType).toBe("ORGAN");
   });
+
+  it("IO-20 createFromMask carries an explicit interpretedType through to the written file", async () => {
+    const bytes = await RTStruct.createFromMask({ mask: cubePhantom(g(), 6), name: "Kidney", interpretedType: "ORGAN" });
+    const rt = await RTStruct.load({ rtstruct: bytes, geometry: g() });
+    expect(rt.roi("Kidney").interpretedType).toBe("ORGAN");
+
+    const gtv = await RTStruct.createFromMask({ mask: cubePhantom(g(), 6), name: "GTV", interpretedType: "GTV" });
+    const rtGtv = await RTStruct.load({ rtstruct: gtv, geometry: g() });
+    expect(rtGtv.roi("GTV").interpretedType).toBe("GTV");
+  });
+
+  it("IO-21 createFromMask carries referencedFrameOfReferenceUID through — no FoR mismatch on reload", async () => {
+    const bytes = await RTStruct.createFromMask({
+      mask: cubePhantom(g("1.2.900"), 6),
+      name: "Liver",
+      referencedFrameOfReferenceUID: "1.2.900",
+    });
+    const rt = await RTStruct.load({ rtstruct: bytes, geometry: g("1.2.900") });
+    expect(rt.diagnostics.map((d) => d.code)).not.toContain("FRAME_OF_REFERENCE_MISMATCH");
+    // and a genuinely different geometry FoR still surfaces the mismatch
+    const rtMismatch = await RTStruct.load({ rtstruct: bytes, geometry: g("1.2.999") });
+    expect(rtMismatch.diagnostics.map((d) => d.code)).toContain("FRAME_OF_REFERENCE_MISMATCH");
+  });
 });

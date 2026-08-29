@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.3.1] - 2026-08-29
+
+Additive, non-breaking. Enables lossless-metadata conversion in `rt-convert-js`.
+
+### Added
+
+- `RTStruct.createFromMask` accepts two optional fields: `interpretedType`
+  (→ `RTROIInterpretedType`) and `referencedFrameOfReferenceUID`
+  (→ `ReferencedFrameOfReferenceUID`). Both were already writable through the internal
+  `writeRTStruct`; they are now reachable from the public mask→RTSTRUCT entry point, so a
+  SEG→RTSTRUCT conversion can carry the source segment's anatomical type and frame of
+  reference instead of emitting an ROI with a generic type and no series association.
+  Omitting either preserves the previous behaviour exactly (`interpretedType` defaults to
+  `"ORGAN"`, no frame of reference is written).
+
 ## [0.3.0] - 2026-08-27
 
 Monorepo split + topology-robustness pass. **No breaking change for consumers** —
