@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readSegDataset, writeSeg } from "../../src/dicom/port.js";
+import { encodeSegFrames, readSegDataset } from "../../src/dicom/port.js";
 import {
   MalformedSegmentationError,
   NotSegmentationError,
@@ -33,7 +33,7 @@ describe("readSegDataset", () => {
   });
 
   it("PARSE-02 orders planes ascending along the normal regardless of frame order", () => {
-    const bytes = writeSeg({
+    const bytes = encodeSegFrames({
       rows: 2,
       columns: 2,
       segmentationType: "BINARY",
@@ -68,7 +68,7 @@ describe("readSegDataset", () => {
   });
 
   it("PARSE-04 warns when a FRACTIONAL SEG omits SegmentationFractionalType", () => {
-    const bytes = writeSeg({
+    const bytes = encodeSegFrames({
       rows: 2,
       columns: 2,
       segmentationType: "FRACTIONAL",
@@ -83,7 +83,7 @@ describe("readSegDataset", () => {
   });
 
   it("PARSE-05 warns and defaults to 255 when MaximumFractionalValue is absent", () => {
-    const bytes = writeSeg({
+    const bytes = encodeSegFrames({
       rows: 2,
       columns: 2,
       segmentationType: "FRACTIONAL",
@@ -108,7 +108,7 @@ describe("readSegDataset", () => {
   });
 
   it("PARSE-07 rejects LABELMAP with a pointer to 0.2.0", () => {
-    const bytes = writeSeg({
+    const bytes = encodeSegFrames({
       rows: 2, columns: 2, segmentationType: "BINARY", forceType: "LABELMAP",
       segments: [{ number: 1 }],
       frames: [{ segmentNumber: 1, position: [0, 0, 0], pixels: [1, 0, 0, 0] },
@@ -118,7 +118,7 @@ describe("readSegDataset", () => {
   });
 
   it("PARSE-08 rejects a non-SEG SOP class", () => {
-    const bytes = writeSeg({
+    const bytes = encodeSegFrames({
       rows: 2, columns: 2, segmentationType: "BINARY",
       sopClassUID: "1.2.840.10008.5.1.4.1.1.2", modality: "CT",
       segments: [{ number: 1 }],
@@ -129,7 +129,7 @@ describe("readSegDataset", () => {
   });
 
   it("PARSE-09 rejects a frame that references an undeclared segment number", () => {
-    const bytes = writeSeg({
+    const bytes = encodeSegFrames({
       rows: 2, columns: 2, segmentationType: "BINARY",
       segments: [{ number: 1 }],
       frames: [
@@ -141,7 +141,7 @@ describe("readSegDataset", () => {
   });
 
   it("PARSE-10 carries coded category/type through", () => {
-    const bytes = writeSeg({
+    const bytes = encodeSegFrames({
       rows: 2, columns: 2, segmentationType: "BINARY",
       segments: [{
         number: 1,

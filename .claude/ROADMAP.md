@@ -408,7 +408,7 @@ RTSTRUCT only (no RTDOSE); PR 3's dose cases were downloaded fresh into
 `Vestibular-Schwannoma-SEG` expose RT dose through TCIA's unauthenticated
 API (checked all 156 collections).
 
-### Phase F — `dicom-seg-js` 0.1.0 — in progress (PR 1 + PR 2 ✅ 2026-08-29; PR 3 write, PR 4 validation open)
+### Phase F — `dicom-seg-js` 0.1.0 — in progress (PR 1 + PR 2 + PR 3 ✅ 2026-08-29; PR 4 validation open)
 
 Inherits everything from Phase E.
 
@@ -470,9 +470,23 @@ histogram fns. 5 tests (HIST-09..13). Additive → 0.1.2, `^0.1.0` covers it so 
 - The bimodal-OCCUPANCY-looks-thresholded diagnostic is **deferred to PR 4** (lands with
   the real-data distribution work).
 
-**PR 3 (next) — `writeSeg` BINARY/FRACTIONAL:** promote the `port.ts` fixture builder to
-the public `writeSeg`; fractional type **required** on write (no default, §7.1);
-round-trip tests (mask → writeSeg → readSeg → mask, `voxelDisagreement === 0`).
+**PR 3 ✅ — `writeSeg` BINARY/FRACTIONAL (branch `feat/dicom-seg-write`):**
+the low-level frame builder in `port.ts` was renamed `encodeSegFrames` (stays internal,
+used by the read-test fixtures); the new public `writeSeg({ segmentationType, segments,
+… })` takes a `Mask3D` per BINARY segment / a `ScalarField3D` per FRACTIONAL segment on
+one shared `GridGeometry` and delegates to it.
+- `fractionalType` **required** for FRACTIONAL → `TypeError` if omitted (§7.1).
+  `maximumFractionalValue` default 255, `[1, 255]` enforced; `fieldScale: "unit"` (default,
+  ×max) vs `"raw"` (integers as-is).
+- Every segment must share one grid → `GridMismatchError`. **One frame per (segment,
+  plane) over the full grid** — so `writeSeg` → `readSeg` is an exact identity (sparse
+  writing = 0.2.0). `SegmentsOverlap` default `NO` / `UNDEFINED`. Coded
+  category/type/modifier + `TrackingID`/`TrackingUID` + algorithm type/name round-trip.
+- 10 tests (RT-01..10): multi-segment `voxelDisagreement === 0`, full-grid preservation
+  with a one-plane segment, all-zero segment → count 0, cross-grid rejection, metadata +
+  overlap survival, missing-`fractionalType` `TypeError`, unit + raw + custom-max
+  round trips, out-of-range max. 213 total (95 + 64 + 24 + 30). Typecheck + build clean;
+  only `writeSeg` exported, `encodeSegFrames` internal.
 
 **PR 4 — `docs/FRACTIONAL-SEG.md` + validation** vs `pydicom-seg` / `highdicom` on real
 FRACTIONAL + BINARY SEG from TCIA; record which fractional types appear in the wild (the
@@ -698,7 +712,8 @@ design-time concern.
 ### `dicom-seg-js` 0.1.0
 - [x] BINARY + FRACTIONAL read (`readSeg`, PR 2). **LABELMAP moved to 0.2.0** (decision
       2026-08-28 — little real-world test data yet)
-- [ ] BINARY and FRACTIONAL write (PR 3)
+- [x] BINARY and FRACTIONAL write (`writeSeg`, PR 3); fractional type required on write
+      (`TypeError` if omitted); mask/field → writeSeg → readSeg exact round trip
 - [x] Honest metrics in the shared core — `meanValue` / `thresholdSensitivity` shipped in
       `rt-geometry-js` 0.1.2 (Phase F PR 1), joining the existing `volumeAboveThreshold`
 - [x] `SegmentationFractionalType` surfaced, never defaulted (PR 2)

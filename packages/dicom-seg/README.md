@@ -4,10 +4,9 @@ DICOM **Segmentation (SEG)** reading for JavaScript/TypeScript, built on
 [`rt-geometry-js`](https://www.npmjs.com/package/rt-geometry-js). Part of the
 [DICOM imaging toolkit](https://github.com/adeelbarki/dicom-imaging-toolkit-packages).
 
-**Status:** 0.1.0 — first release, **read only**. `BINARY` masks and `FRACTIONAL`
-probability/occupancy fields. `LABELMAP` (PS3.3 Sup 243) and `writeSeg` land in later
-releases. Requires the peer dependency
-[`rt-geometry-js`](https://www.npmjs.com/package/rt-geometry-js) (`^0.1.2`);
+**Status:** 0.1.0 — first release. Read **and write** `BINARY` masks and `FRACTIONAL`
+probability/occupancy fields. `LABELMAP` (PS3.3 Sup 243) lands in 0.2.0. Requires the peer
+dependency [`rt-geometry-js`](https://www.npmjs.com/package/rt-geometry-js) (`^0.1.2`);
 `npm install dicom-seg-js rt-geometry-js`.
 
 **Standard pinned (for doc references):** DICOM PS3.3 **2026c**.
@@ -54,6 +53,38 @@ seg.sampleConfidence(1, [x, y, z]);   // interpolated confidence at a physical p
 `mask()` on a FRACTIONAL SEG and `field()` on a BINARY one both throw
 `SegmentationTypeMismatchError` — there is no safe default threshold to turn a probability
 field into a mask, so the caller must pick one.
+
+## Write
+
+```ts
+import { writeSeg } from "dicom-seg-js";
+
+// BINARY — one Mask3D per segment, all on one GridGeometry
+const bytes = writeSeg({
+  segmentationType: "BINARY",
+  segments: [
+    { number: 1, label: "Liver", mask: liverMask,
+      category: { value: "T-D0050", scheme: "SRT", meaning: "Tissue" },
+      propertyType: { value: "T-62000", scheme: "SRT", meaning: "Liver" } },
+    { number: 2, label: "Tumor", mask: tumorMask },
+  ],
+});
+
+// FRACTIONAL — fractionalType is REQUIRED, there is no default (see FRACTIONAL-SEG.md §1)
+const probBytes = writeSeg({
+  segmentationType: "FRACTIONAL",
+  fractionalType: "PROBABILITY",
+  maximumFractionalValue: 255,        // optional, default 255
+  segments: [{ number: 1, label: "Tumor", field: probField }],  // values in 0..1
+});
+```
+
+`writeSeg` derives the SEG grid from the first segment's mask/field; every other segment
+must be on the same grid (`GridMismatchError` otherwise). One frame is written per
+`(segment, plane)` across the full grid, so `writeSeg` → `readSeg` is an exact round trip
+(sparse writing, which omits all-zero frames, is a 0.2.0 feature). Pass
+`fieldScale: "raw"` when your `field` values are already integers in
+`[0, maximumFractionalValue]` rather than `[0, 1]`.
 
 ## What it reads
 

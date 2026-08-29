@@ -32,6 +32,11 @@ export * from "rt-geometry-js";
 export * from "./types.js";
 export * from "./errors.js";
 
+// Write a conformant SEG from a Mask3D per BINARY segment / a ScalarField3D per FRACTIONAL
+// segment. The low-level frame encoder (encodeSegFrames) stays internal.
+export { writeSeg } from "./dicom/port.js";
+export type { WriteSegOptions, WriteSegSegment } from "./dicom/port.js";
+
 /**
  * A parsed DICOM Segmentation and the per-segment masks / fields over it.
  *

@@ -1581,3 +1581,47 @@ typecheck + build clean; bare `rt-geometry-js` specifier in `dist/`;
 
 Publish order when 0.1.0 ships: `rt-geometry-js` 0.1.2 (still unpublished —
 only 0.1.1 on npm) FIRST, then `dicom-seg-js`.
+
+## Phase F PR 3 — dicom-seg-js writeSeg (2026-08-29)
+
+Branch `feat/dicom-seg-write`.
+
+`src/dicom/port.ts`: the PR 2 frame-level fixture builder `writeSeg` was
+renamed `encodeSegFrames` (+ `EncodeSegOptions` / `EncodeSegSegment`;
+`WriteSegFrame` kept). It stays internal — `tests/fixtures.ts` and
+`tests/unit/port.test.ts` use it for per-frame control. A new PUBLIC
+`writeSeg(options)` sits on top:
+- Input: `{ segmentationType, segments: [{ number, label, mask? | field?,
+  category?, propertyType?, propertyTypeModifier?, trackingId?,
+  trackingUid?, algorithmType?, algorithmName? }], fractionalType?,
+  maximumFractionalValue?, fieldScale?, segmentsOverlap?,
+  frameOfReferenceUID?, tolerance? }`.
+- BINARY → `segment.mask` (Mask3D); FRACTIONAL → `segment.field`
+  (ScalarField3D). All segments must be on one `GridGeometry`
+  (`.equals`, tol overridable) → `GridMismatchError` otherwise. Grid,
+  orientation, pixel spacing, slice thickness (`planeThicknessMm(0)`),
+  FoR all derived from that geometry.
+- **`fractionalType` required for FRACTIONAL** — `TypeError` if missing
+  (§7.1, no default). `maximumFractionalValue` default 255, `[1,255]`
+  enforced (8-bit). `fieldScale`: `"unit"` (default, value×max) |
+  `"raw"` (value as integer).
+- **One frame per (segment, plane) over the whole grid** — no sparse
+  omission — so `writeSeg → readSeg` is an exact identity including empty
+  planes. Sparse writing (what real files do) is a 0.2.0 feature; reading
+  sparse already works. Decided this way for round-trip integrity over
+  file size.
+- `SegmentsOverlap` default `NO` (1 segment) / `UNDEFINED` (>1).
+- `encodeSegFrames` extended: `SegmentAlgorithmName` now from the segment
+  (was hardcoded "dicom-seg-js-fixture"), + `propertyTypeModifier` /
+  `TrackingID` / `TrackingUID` emitted when present.
+
+`src/index.ts`: `export { writeSeg }` + `WriteSegOptions` /
+`WriteSegSegment`. `encodeSegFrames` NOT exported.
+
+10 round-trip tests (`tests/unit/roundtrip.test.ts` RT-01..10). 30 seg
+tests total; full gate 213 (95 geometry + 64 rtstruct + 24 rtdose + 30
+seg); typecheck + build clean; bare `rt-geometry-js` specifier in dist/.
+
+README + CHANGELOG updated (0.1.0 is now read+write). PR 4 = FRACTIONAL-SEG.md
+§4 + validation vs pydicom-seg / highdicom. Publish order still:
+rt-geometry-js 0.1.2 (only 0.1.1 on npm) BEFORE dicom-seg-js.

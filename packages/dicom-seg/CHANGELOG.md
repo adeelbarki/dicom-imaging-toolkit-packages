@@ -2,9 +2,10 @@
 
 ## [0.1.0] - 2026-08-29
 
-First release — **read only**. DICOM Segmentation (SEG) reading, built on `rt-geometry-js`
-`^0.1.2` (peer dependency). Part of the `dicom-imaging-toolkit-packages` monorepo
-(roadmap v2, Phase F, PR 2).
+First release. DICOM Segmentation (SEG) **read and write** — `BINARY` masks and
+`FRACTIONAL` probability/occupancy fields — built on `rt-geometry-js` `^0.1.2` (peer
+dependency). Part of the `dicom-imaging-toolkit-packages` monorepo (roadmap v2, Phase F,
+PRs 2–3).
 
 ### Added
 
@@ -36,10 +37,22 @@ First release — **read only**. DICOM Segmentation (SEG) reading, built on `rt-
 - The full `rt-geometry-js` surface is re-exported, so `meanValue` /
   `volumeAboveThreshold` / `thresholdSensitivity` (from 0.1.2) are available from a single
   import. No "accuracy" / "% correct" metric anywhere (§7.2).
+- `writeSeg({ segmentationType, segments, ... })` — a `Mask3D` per BINARY segment or a
+  `ScalarField3D` per FRACTIONAL segment, all on one shared `GridGeometry`:
+  - **`fractionalType` is required** for FRACTIONAL — no default (roadmap §7.1); omitting
+    it is a `TypeError`.
+  - `maximumFractionalValue` (default 255) scales `[0, 1]` field values on write;
+    `fieldScale: "raw"` takes `[0, maximumFractionalValue]` integers instead.
+  - Every segment must share one grid (`GridMismatchError` otherwise). One frame per
+    `(segment, plane)` over the full grid, so `writeSeg` → `readSeg` is an exact round
+    trip. `SegmentsOverlap` defaults to `NO` (one segment) / `UNDEFINED` (more).
+  - Coded category / type / type-modifier, `TrackingID` / `TrackingUID`, algorithm
+    type/name all round-trip.
 
 ### Known / deferred
 
-- **Read only** — `writeSeg` (BINARY + FRACTIONAL) is the next PR.
+- **Sparse writing** (omitting all-zero frames, as most real files do) — 0.2.0. Reading
+  sparse SEGs is fully supported now.
 - **LABELMAP** deferred to 0.2.0 (little real-world test data yet).
 - FRACTIONAL diagnostics so far: missing type, missing `MaximumFractionalValue`. The
   "OCCUPANCY field that is really a thresholded probability" heuristic (§7.1) and the
