@@ -9,6 +9,13 @@ probability/occupancy fields. `LABELMAP` (PS3.3 Sup 243) lands in 0.2.0. Require
 dependency [`rt-geometry-js`](https://www.npmjs.com/package/rt-geometry-js) (`^0.1.2`);
 `npm install dicom-seg-js rt-geometry-js`.
 
+**Validated against real DICOM files**, not just its own fixtures — `dicom-seg-js`'s
+reconstruction is **voxel-exact vs `highdicom`** on real TCIA SEG files (C4KC-KiTS 2-segment
+BINARY, NSCLC-Radiomics 6-segment BINARY, ISPY1 FRACTIONAL): 728 / 728 per-slice checksums
+identical. See
+[VALIDATION.md](https://github.com/adeelbarki/dicom-imaging-toolkit-packages/blob/main/packages/dicom-seg/VALIDATION.md)
+(this link works from both GitHub and the npm page).
+
 **Standard pinned (for doc references):** DICOM PS3.3 **2026c**.
 
 > **FRACTIONAL values are per-voxel model *confidence*, not accuracy.** Averaging them does

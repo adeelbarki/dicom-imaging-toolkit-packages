@@ -408,7 +408,7 @@ RTSTRUCT only (no RTDOSE); PR 3's dose cases were downloaded fresh into
 `Vestibular-Schwannoma-SEG` expose RT dose through TCIA's unauthenticated
 API (checked all 156 collections).
 
-### Phase F — `dicom-seg-js` 0.1.0 — in progress (PR 1 + PR 2 + PR 3 ✅ 2026-08-29; PR 4 validation open)
+### Phase F — `dicom-seg-js` 0.1.0 ✅ COMPLETE (2026-08-29) — PR 1–4; validated voxel-exact vs highdicom. Publish rt-geometry-js 0.1.2 + dicom-seg-js when ready.
 
 Inherits everything from Phase E.
 
@@ -488,11 +488,28 @@ one shared `GridGeometry` and delegates to it.
   round trips, out-of-range max. 213 total (95 + 64 + 24 + 30). Typecheck + build clean;
   only `writeSeg` exported, `encodeSegFrames` internal.
 
-**PR 4 — `docs/FRACTIONAL-SEG.md` + validation** vs `pydicom-seg` / `highdicom` on real
-FRACTIONAL + BINARY SEG from TCIA; record which fractional types appear in the wild (the
-way the RTSTRUCT hole-encoding distribution was recorded). `meanConfidence` /
-`volumeAboveThreshold` / `thresholdSensitivity` the only exposed quantities — no
-"accuracy" / "% correct" anywhere (§7.2).
+**PR 4 ✅ — validation vs `highdicom` + `FRACTIONAL-SEG.md` §4 (branch
+`feat/dicom-seg-validation`):** harness in `packages/dicom-seg/scripts/validation/`
+(`metrics-dicom-seg-js.ts`, `metrics-highdicom.py`, `compare.mjs`) — each side
+reconstructs a SEG and emits per-(segment, plane) FNV-1a slice checksums (same hash + byte
+order both sides) keyed by physical z, `compare.mjs` diffs them.
+- **Voxel-exact on all 3 real TCIA files:** C4KC-KiTS `KiTS-00007` (BINARY, 2 seg, 122
+  slices), NSCLC-Radiomics `LUNG1-005` (BINARY, 6 seg, 546), ISPY1 `ISPY1_1004`
+  (FRACTIONAL/OCCUPANCY, 60; raw sum 22 876 305 matched). 728/728 slice checksums
+  identical to highdicom.
+- New `FRACTIONAL_VALUES_LOOK_BINARY` diagnostic (deferred from PR 2): ≥ 98% of non-zero
+  values at `MaximumFractionalValue` → binary-mask-stored-as-fractional. Fires on the real
+  ISPY1 "OCCUPANCY" file (every non-zero voxel == 255).
+- Perf: BINARY continuous-bitstream unpack memoised per parse (was O(frames²); 546-frame
+  file: timeout → ~2 s).
+- Fractional-types-in-the-wild note in `FRACTIONAL-SEG.md` §4 + `VALIDATION.md`: FRACTIONAL
+  SEG is rare in TCIA, mostly breast-MRI, and the one sampled was a mislabelled binary.
+  No graded PROBABILITY found. `pydicom-seg` was unusable (needs `pydicom<2.4`); highdicom
+  0.28 is the reference. 31 seg tests (PARSE-01..11, SEG-01..10, RT-01..10). Full gate
+  ~215 tests.
+
+`dicom-seg-js` is read+write, validated. Publish order when it ships: `rt-geometry-js`
+0.1.2 (only 0.1.1 on npm) FIRST, then `dicom-seg-js`.
 
 ### Phase G — `rt-convert-js`
 
@@ -719,14 +736,13 @@ design-time concern.
 - [x] `SegmentationFractionalType` surfaced, never defaulted (PR 2)
 - [x] `MaximumFractionalValue` rescaling in `field()`, raw integers in `rawField()` (PR 2)
 - [x] `SegmentsOverlap` surfaced (PR 2)
-- [~] Calibration caveat in `FRACTIONAL-SEG.md` — §1–3 written (PR 2); §4 validation table
-      pending (PR 4)
+- [x] `FRACTIONAL-SEG.md` — §1–3 (PROBABILITY vs OCCUPANCY, calibration, display; PR 2);
+      §4 validation table (PR 4)
 - [x] No "accuracy" / "% correct" metric anywhere in the API (PR 2)
-- [ ] Fractional type required on write, preserved on read
-- [ ] `MaximumFractionalValue` rescaling, with raw access retained
-- [ ] `SegmentsOverlap` surfaced
-- [ ] Calibration caveat documented in `FRACTIONAL-SEG.md`
-- [ ] No "accuracy" or "% correct" metric exposed anywhere in the API
+- [x] Validated voxel-exact vs `highdicom` on 3 real TCIA SEG files — 728/728 slice
+      checksums identical (`VALIDATION.md`, PR 4); `FRACTIONAL_VALUES_LOOK_BINARY`
+      diagnostic added
+- [ ] Published to npm — `dicom-seg-js` 0.1.0 (manual; after `rt-geometry-js` 0.1.2)
 
 ### `rt-convert-js` 0.1.0
 - [ ] Both directions, with lossiness documented and diagnosed

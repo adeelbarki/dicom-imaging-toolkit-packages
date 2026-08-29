@@ -140,6 +140,22 @@ describe("readSegDataset", () => {
     expect(() => readSegDataset(bytes)).toThrow(MalformedSegmentationError);
   });
 
+  it("PARSE-11 flags a FRACTIONAL field whose values are all at the max (binary-in-disguise)", () => {
+    const allMax = fractionalSeg({
+      rows: 3, columns: 3, planeCount: 2, segments: [1], max: 255,
+      fractionalType: "OCCUPANCY",
+      value: (_s, c, r) => (c === r ? 255 : 0), // only 0 and 255
+    });
+    expect(readSegDataset(allMax).diagnostics.map((d) => d.code)).toContain("FRACTIONAL_VALUES_LOOK_BINARY");
+
+    const graded = fractionalSeg({
+      rows: 3, columns: 3, planeCount: 2, segments: [1], max: 255,
+      fractionalType: "OCCUPANCY",
+      value: (_s, c, r, k) => 40 + 30 * (c + r + k), // spread of intermediate values
+    });
+    expect(readSegDataset(graded).diagnostics.map((d) => d.code)).not.toContain("FRACTIONAL_VALUES_LOOK_BINARY");
+  });
+
   it("PARSE-10 carries coded category/type through", () => {
     const bytes = encodeSegFrames({
       rows: 2, columns: 2, segmentationType: "BINARY",

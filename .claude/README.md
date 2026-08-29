@@ -1625,3 +1625,52 @@ seg); typecheck + build clean; bare `rt-geometry-js` specifier in dist/.
 README + CHANGELOG updated (0.1.0 is now read+write). PR 4 = FRACTIONAL-SEG.md
 §4 + validation vs pydicom-seg / highdicom. Publish order still:
 rt-geometry-js 0.1.2 (only 0.1.1 on npm) BEFORE dicom-seg-js.
+
+## Phase F PR 4 — dicom-seg-js validation vs highdicom (2026-08-29)
+
+Branch `feat/dicom-seg-validation` (based on PR 3, not main — PR 3 wasn't
+merged when this started, so rebased the branch onto `feat/dicom-seg-write`).
+
+Harness `packages/dicom-seg/scripts/validation/`:
+- `metrics-dicom-seg-js.ts` — reads a SEG, per (segment, plane) emits an
+  FNV-1a checksum of the row-major slice bytes (0/1 BINARY, raw u8
+  FRACTIONAL) keyed by physical z, + per-segment nonzero count / raw sum /
+  raw max. Uses the cache fix below.
+- `metrics-highdicom.py` — `highdicom.seg.segread` + `seg.pixel_array`
+  (highdicom's authoritative BINARY unpack) + per-frame FG parse; same
+  FNV-1a, same byte order. `pip install highdicom pydicom numpy` (0.28 /
+  3.0). **pydicom-seg is unusable** — imports `pydicom._storage_sopclass_uids`,
+  gone since pydicom 2.4; highdicom is the reference.
+- `compare.mjs` — join segments by number, slices by rounded z, check
+  every matched checksum. "voxel-exact" = all identical + zero count Δ.
+
+Data: `scratch/data-seg/{C4KC-KiTS-KiTS-00007, NSCLC-Radiomics-LUNG1-005,
+ISPY1-ISPY1_1004}/SEG.dcm` (TCIA, gitignored). Scanned all 156
+collections: 34 have SEG modality, almost all BINARY; FRACTIONAL is
+breast-MRI (ISPY1/2, ACRIN-6698).
+
+Result: **voxel-exact on all 3** — 728/728 (segment, plane) slice
+checksums byte-identical to highdicom. KiTS 2-seg BINARY 122 slices,
+NSCLC 6-seg BINARY 546, ISPY1 FRACTIONAL/OCCUPANCY 60 (raw value sum
+22 876 305 matched exactly).
+
+Found + added: `FRACTIONAL_VALUES_LOOK_BINARY` diagnostic (was deferred
+from PR 2). ISPY1_1004 declares OCCUPANCY but every non-zero voxel is 255
+— a binary mask stored as FRACTIONAL. Heuristic: >= 98% of non-zero values
+at MaximumFractionalValue. One pass over pixel bytes in readSegDataset.
+Test PARSE-11.
+
+Perf fix: `binaryFrame` continuous-bitstream path was calling
+`BitArray.unpack` on the WHOLE ~18 MB stream per frame — O(frames²), the
+546-frame file timed out. Now unpacked once, cached in a
+`WeakMap<ParsedSeg, Uint8Array>`. ~2 s for that file.
+
+`docs/FRACTIONAL-SEG.md` §4 + `packages/dicom-seg/VALIDATION.md` written
+(agreement table, data sources, 4 findings, "not yet covered": no graded
+PROBABILITY, no SegmentsOverlap YES, byte-aligned variant synthetic-only).
+README "Validated against real DICOM files" line + absolute VALIDATION.md
+URL (not in the tarball).
+
+31 seg tests (PARSE-01..11, SEG-01..10, RT-01..10). Full gate green.
+`dicom-seg-js` 0.1.0 is read+write+validated. Publish: `rt-geometry-js`
+0.1.2 FIRST (only 0.1.1 on npm), then `dicom-seg-js`.

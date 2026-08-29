@@ -305,6 +305,28 @@ export function readSegDataset(bytes: ArrayBuffer): ParsedSeg {
           `MaximumFractionalValue (0062,000E) is ${maxRaw === undefined ? "absent" : `invalid (${maxRaw})`}; assuming 255`),
       );
     }
+
+    // Bimodal check (roadmap §7.1): a FRACTIONAL field whose non-zero values are almost all
+    // pinned at the max is a thresholded / binary mask stored as FRACTIONAL, not a graded
+    // probability or occupancy. One pass over the 8-bit pixel bytes.
+    const max = maximumFractionalValue;
+    const nearMax = max - Math.max(1, Math.floor(max * 0.02));
+    let nonZero = 0;
+    let atExtreme = 0;
+    for (let i = 0; i < pixelData.length; i++) {
+      const v = pixelData[i] as number;
+      if (v === 0) continue;
+      nonZero++;
+      if (v >= nearMax) atExtreme++;
+    }
+    if (nonZero > 0 && atExtreme / nonZero >= 0.98) {
+      diagnostics.push(
+        createDiagnostic("FRACTIONAL_VALUES_LOOK_BINARY", "warning",
+          `${((atExtreme / nonZero) * 100).toFixed(1)}% of non-zero values are at (or within 2% of) MaximumFractionalValue ` +
+            `(${max}) — this ${fractionalType ?? "FRACTIONAL"} field is effectively a binary mask stored as FRACTIONAL, ` +
+            `not a graded field`),
+      );
+    }
   }
 
   const segmentsOverlap = ((ds["SegmentsOverlap"] as string | undefined) ?? "UNDEFINED").toUpperCase() as SegmentsOverlap;
@@ -334,6 +356,11 @@ export function readSegDataset(bytes: ArrayBuffer): ParsedSeg {
   };
 }
 
+// The full continuous bitstream, unpacked once per ParsedSeg (BitArray.unpack returns
+// one byte per bit, so this is ~8× the PixelData size — still cheap next to re-unpacking
+// the whole stream for every frame, which is O(frames²) work on a large SEG).
+const continuousBitsCache = new WeakMap<ParsedSeg, Uint8Array>();
+
 /** Unpacked 0/1 bits for BINARY frame `frameIndex` (length rows·columns). */
 export function binaryFrame(parsed: ParsedSeg, frameIndex: number): Uint8Array {
   const rc = parsed.rows * parsed.columns;
@@ -345,9 +372,11 @@ export function binaryFrame(parsed: ParsedSeg, frameIndex: number): Uint8Array {
     for (let i = 0; i < rc; i++) out[i] = bits[i] ? 1 : 0;
     return out;
   }
-  // continuous bitstream: unpack the whole thing once per call is wasteful, but callers
-  // (Segmentation.mask) unpack per segment, not per pixel — fine for v0.1.
-  const allBits = BitArray.unpack(parsed.pixelData) as Uint8Array;
+  let allBits = continuousBitsCache.get(parsed);
+  if (!allBits) {
+    allBits = BitArray.unpack(parsed.pixelData) as Uint8Array;
+    continuousBitsCache.set(parsed, allBits);
+  }
   const base = frameIndex * rc;
   for (let i = 0; i < rc; i++) out[i] = allBits[base + i] ? 1 : 0;
   return out;
