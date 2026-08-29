@@ -1,14 +1,20 @@
 # dicom-seg-js
 
-DICOM **Segmentation (SEG)** reading for JavaScript/TypeScript, built on
+DICOM **Segmentation (SEG)** reading and writing for JavaScript/TypeScript, built on
 [`rt-geometry-js`](https://www.npmjs.com/package/rt-geometry-js). Part of the
 [DICOM imaging toolkit](https://github.com/adeelbarki/dicom-imaging-toolkit-packages).
 
-**Status:** 0.1.0 — first release, **read only**. `BINARY` masks and `FRACTIONAL`
-probability/occupancy fields. `LABELMAP` (PS3.3 Sup 243) and `writeSeg` land in later
-releases. Requires the peer dependency
-[`rt-geometry-js`](https://www.npmjs.com/package/rt-geometry-js) (`^0.1.2`);
+**Status:** 0.1.0 — first release. Read **and write** `BINARY` masks and `FRACTIONAL`
+probability/occupancy fields. `LABELMAP` (PS3.3 Sup 243) lands in 0.2.0. Requires the peer
+dependency [`rt-geometry-js`](https://www.npmjs.com/package/rt-geometry-js) (`^0.1.2`);
 `npm install dicom-seg-js rt-geometry-js`.
+
+**Validated against real DICOM files**, not just its own fixtures — `dicom-seg-js`'s
+reconstruction is **voxel-exact vs `highdicom`** on real TCIA SEG files (C4KC-KiTS 2-segment
+BINARY, NSCLC-Radiomics 6-segment BINARY, ISPY1 FRACTIONAL): 728 / 728 per-slice checksums
+identical. See
+[VALIDATION.md](https://github.com/adeelbarki/dicom-imaging-toolkit-packages/blob/main/packages/dicom-seg/VALIDATION.md)
+(this link works from both GitHub and the npm page).
 
 **Standard pinned (for doc references):** DICOM PS3.3 **2026c**.
 
@@ -55,13 +61,45 @@ seg.sampleConfidence(1, [x, y, z]);   // interpolated confidence at a physical p
 `SegmentationTypeMismatchError` — there is no safe default threshold to turn a probability
 field into a mask, so the caller must pick one.
 
+## Write
+
+```ts
+import { writeSeg } from "dicom-seg-js";
+
+// BINARY — one Mask3D per segment, all on one GridGeometry
+const bytes = writeSeg({
+  segmentationType: "BINARY",
+  segments: [
+    { number: 1, label: "Liver", mask: liverMask,
+      category: { value: "T-D0050", scheme: "SRT", meaning: "Tissue" },
+      propertyType: { value: "T-62000", scheme: "SRT", meaning: "Liver" } },
+    { number: 2, label: "Tumor", mask: tumorMask },
+  ],
+});
+
+// FRACTIONAL — fractionalType is REQUIRED, there is no default (see FRACTIONAL-SEG.md §1)
+const probBytes = writeSeg({
+  segmentationType: "FRACTIONAL",
+  fractionalType: "PROBABILITY",
+  maximumFractionalValue: 255,        // optional, default 255
+  segments: [{ number: 1, label: "Tumor", field: probField }],  // values in 0..1
+});
+```
+
+`writeSeg` derives the SEG grid from the first segment's mask/field; every other segment
+must be on the same grid (`GridMismatchError` otherwise). One frame is written per
+`(segment, plane)` across the full grid, so `writeSeg` → `readSeg` is an exact round trip
+(sparse writing, which omits all-zero frames, is a 0.2.0 feature). Pass
+`fieldScale: "raw"` when your `field` values are already integers in
+`[0, maximumFractionalValue]` rather than `[0, 1]`.
+
 ## What it reads
 
 | Element | Handling |
 |---|---|
 | `SegmentationType` (0062,0001) | `BINARY` → `mask(n)`; `FRACTIONAL` → `field(n)` / `rawField(n)`. `LABELMAP` → `UnsupportedSegmentationTypeError` (0.2.0) |
 | `SegmentSequence` (0062,0002) | number, label, algorithm type/name, coded `SegmentedPropertyCategory` / `Type` / `TypeModifier`, `TrackingID` / `TrackingUID` |
-| `SegmentationFractionalType` (0062,0010) | surfaced on `seg.fractionalType`; **never defaulted** — absent is `undefined` + a diagnostic |
+| `SegmentationFractionalType` (0062,0010) | surfaced on `seg.fractionalType`; **never defaulted** — absent is `undefined` + a diagnostic. A field whose non-zero values are ≥ 98% at the max raises `FRACTIONAL_VALUES_LOOK_BINARY` (a binary mask stored as FRACTIONAL) |
 | `MaximumFractionalValue` (0062,000E) | used to rescale `field(n)` to 0..1; `rawField(n)` keeps the integers. Absent → assumed 255 + a diagnostic |
 | `SegmentsOverlap` (0062,0013) | surfaced on `seg.segmentsOverlap`; `YES` also raises a diagnostic |
 | Per-Frame / Shared Functional Groups | plane positions, orientation, pixel spacing → one `GridGeometry` spanning every frame position |

@@ -408,7 +408,7 @@ RTSTRUCT only (no RTDOSE); PR 3's dose cases were downloaded fresh into
 `Vestibular-Schwannoma-SEG` expose RT dose through TCIA's unauthenticated
 API (checked all 156 collections).
 
-### Phase F — `dicom-seg-js` 0.1.0 — in progress (PR 1 + PR 2 ✅ 2026-08-29; PR 3 write, PR 4 validation open)
+### Phase F — `dicom-seg-js` 0.1.0 ✅ COMPLETE (2026-08-29) — PR 1–4; validated voxel-exact vs highdicom. Publish rt-geometry-js 0.1.2 + dicom-seg-js when ready.
 
 Inherits everything from Phase E.
 
@@ -470,15 +470,46 @@ histogram fns. 5 tests (HIST-09..13). Additive → 0.1.2, `^0.1.0` covers it so 
 - The bimodal-OCCUPANCY-looks-thresholded diagnostic is **deferred to PR 4** (lands with
   the real-data distribution work).
 
-**PR 3 (next) — `writeSeg` BINARY/FRACTIONAL:** promote the `port.ts` fixture builder to
-the public `writeSeg`; fractional type **required** on write (no default, §7.1);
-round-trip tests (mask → writeSeg → readSeg → mask, `voxelDisagreement === 0`).
+**PR 3 ✅ — `writeSeg` BINARY/FRACTIONAL (branch `feat/dicom-seg-write`):**
+the low-level frame builder in `port.ts` was renamed `encodeSegFrames` (stays internal,
+used by the read-test fixtures); the new public `writeSeg({ segmentationType, segments,
+… })` takes a `Mask3D` per BINARY segment / a `ScalarField3D` per FRACTIONAL segment on
+one shared `GridGeometry` and delegates to it.
+- `fractionalType` **required** for FRACTIONAL → `TypeError` if omitted (§7.1).
+  `maximumFractionalValue` default 255, `[1, 255]` enforced; `fieldScale: "unit"` (default,
+  ×max) vs `"raw"` (integers as-is).
+- Every segment must share one grid → `GridMismatchError`. **One frame per (segment,
+  plane) over the full grid** — so `writeSeg` → `readSeg` is an exact identity (sparse
+  writing = 0.2.0). `SegmentsOverlap` default `NO` / `UNDEFINED`. Coded
+  category/type/modifier + `TrackingID`/`TrackingUID` + algorithm type/name round-trip.
+- 10 tests (RT-01..10): multi-segment `voxelDisagreement === 0`, full-grid preservation
+  with a one-plane segment, all-zero segment → count 0, cross-grid rejection, metadata +
+  overlap survival, missing-`fractionalType` `TypeError`, unit + raw + custom-max
+  round trips, out-of-range max. 213 total (95 + 64 + 24 + 30). Typecheck + build clean;
+  only `writeSeg` exported, `encodeSegFrames` internal.
 
-**PR 4 — `docs/FRACTIONAL-SEG.md` + validation** vs `pydicom-seg` / `highdicom` on real
-FRACTIONAL + BINARY SEG from TCIA; record which fractional types appear in the wild (the
-way the RTSTRUCT hole-encoding distribution was recorded). `meanConfidence` /
-`volumeAboveThreshold` / `thresholdSensitivity` the only exposed quantities — no
-"accuracy" / "% correct" anywhere (§7.2).
+**PR 4 ✅ — validation vs `highdicom` + `FRACTIONAL-SEG.md` §4 (branch
+`feat/dicom-seg-validation`):** harness in `packages/dicom-seg/scripts/validation/`
+(`metrics-dicom-seg-js.ts`, `metrics-highdicom.py`, `compare.mjs`) — each side
+reconstructs a SEG and emits per-(segment, plane) FNV-1a slice checksums (same hash + byte
+order both sides) keyed by physical z, `compare.mjs` diffs them.
+- **Voxel-exact on all 3 real TCIA files:** C4KC-KiTS `KiTS-00007` (BINARY, 2 seg, 122
+  slices), NSCLC-Radiomics `LUNG1-005` (BINARY, 6 seg, 546), ISPY1 `ISPY1_1004`
+  (FRACTIONAL/OCCUPANCY, 60; raw sum 22 876 305 matched). 728/728 slice checksums
+  identical to highdicom.
+- New `FRACTIONAL_VALUES_LOOK_BINARY` diagnostic (deferred from PR 2): ≥ 98% of non-zero
+  values at `MaximumFractionalValue` → binary-mask-stored-as-fractional. Fires on the real
+  ISPY1 "OCCUPANCY" file (every non-zero voxel == 255).
+- Perf: BINARY continuous-bitstream unpack memoised per parse (was O(frames²); 546-frame
+  file: timeout → ~2 s).
+- Fractional-types-in-the-wild note in `FRACTIONAL-SEG.md` §4 + `VALIDATION.md`: FRACTIONAL
+  SEG is rare in TCIA, mostly breast-MRI, and the one sampled was a mislabelled binary.
+  No graded PROBABILITY found. `pydicom-seg` was unusable (needs `pydicom<2.4`); highdicom
+  0.28 is the reference. 31 seg tests (PARSE-01..11, SEG-01..10, RT-01..10). Full gate
+  ~215 tests.
+
+`dicom-seg-js` is read+write, validated. Publish order when it ships: `rt-geometry-js`
+0.1.2 (only 0.1.1 on npm) FIRST, then `dicom-seg-js`.
 
 ### Phase G — `rt-convert-js`
 
@@ -631,10 +662,16 @@ against a reference throughout rather than at the end.
   `packages/rtdose/VALIDATION.md` (194/195 comparisons within tolerance).
   Harness: `packages/rtdose/scripts/validation/`. Follow-up: non-Varian
   planning systems (NBIA-login-gated on TCIA).
-- **SEG:** round-trip real FRACTIONAL and BINARY SEG files; compare
-  against `pydicom-seg` / `highdicom` on the same inputs. Record which
-  fractional types appear in the wild, the way the encoding distribution
-  was recorded for RTSTRUCT holes.
+- **SEG:** ✅ done (Phase F PR 4, 2026-08-29). `dicom-seg-js` vs `highdicom`
+  0.28 on 3 real TCIA SEG files (C4KC-KiTS 2-seg BINARY, NSCLC-Radiomics
+  6-seg BINARY, ISPY1 FRACTIONAL/OCCUPANCY) — **voxel-exact, 728/728
+  per-slice checksums identical**. `pydicom-seg` was unusable (needs
+  `pydicom<2.4`). Fractional-types-in-the-wild recorded in
+  `packages/dicom-seg/VALIDATION.md` / `docs/FRACTIONAL-SEG.md` §4:
+  FRACTIONAL SEG is rare in TCIA, mostly breast MRI, and the one sampled
+  was a binary mask mislabelled as OCCUPANCY (caught by the new
+  `FRACTIONAL_VALUES_LOOK_BINARY` diagnostic). Harness:
+  `packages/dicom-seg/scripts/validation/`.
 - Carry existing RTSTRUCT evidence into the same document: four-vendor
   round-trip results, the encoding distribution (Elekta skull 92%
   keyhole, Plastimatch lungs 4–6%, three vendors 0%, XOR unobserved
@@ -698,20 +735,20 @@ design-time concern.
 ### `dicom-seg-js` 0.1.0
 - [x] BINARY + FRACTIONAL read (`readSeg`, PR 2). **LABELMAP moved to 0.2.0** (decision
       2026-08-28 — little real-world test data yet)
-- [ ] BINARY and FRACTIONAL write (PR 3)
+- [x] BINARY and FRACTIONAL write (`writeSeg`, PR 3); fractional type required on write
+      (`TypeError` if omitted); mask/field → writeSeg → readSeg exact round trip
 - [x] Honest metrics in the shared core — `meanValue` / `thresholdSensitivity` shipped in
       `rt-geometry-js` 0.1.2 (Phase F PR 1), joining the existing `volumeAboveThreshold`
 - [x] `SegmentationFractionalType` surfaced, never defaulted (PR 2)
 - [x] `MaximumFractionalValue` rescaling in `field()`, raw integers in `rawField()` (PR 2)
 - [x] `SegmentsOverlap` surfaced (PR 2)
-- [~] Calibration caveat in `FRACTIONAL-SEG.md` — §1–3 written (PR 2); §4 validation table
-      pending (PR 4)
+- [x] `FRACTIONAL-SEG.md` — §1–3 (PROBABILITY vs OCCUPANCY, calibration, display; PR 2);
+      §4 validation table (PR 4)
 - [x] No "accuracy" / "% correct" metric anywhere in the API (PR 2)
-- [ ] Fractional type required on write, preserved on read
-- [ ] `MaximumFractionalValue` rescaling, with raw access retained
-- [ ] `SegmentsOverlap` surfaced
-- [ ] Calibration caveat documented in `FRACTIONAL-SEG.md`
-- [ ] No "accuracy" or "% correct" metric exposed anywhere in the API
+- [x] Validated voxel-exact vs `highdicom` on 3 real TCIA SEG files — 728/728 slice
+      checksums identical (`VALIDATION.md`, PR 4); `FRACTIONAL_VALUES_LOOK_BINARY`
+      diagnostic added
+- [ ] Published to npm — `dicom-seg-js` 0.1.0 (manual; after `rt-geometry-js` 0.1.2)
 
 ### `rt-convert-js` 0.1.0
 - [ ] Both directions, with lossiness documented and diagnosed

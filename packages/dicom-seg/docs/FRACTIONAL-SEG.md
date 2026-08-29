@@ -76,7 +76,30 @@ consumer, not something the library can enforce.
 
 ## 4. Validation
 
-*Pending — Phase F PR 4.* This section will carry the agreement table against
-`pydicom-seg` / `highdicom` on real FRACTIONAL + BINARY SEG files from TCIA, and record
-which `SegmentationFractionalType` values actually appear in the wild (the way the
-`rtstruct-js` hole-encoding distribution was recorded).
+`dicom-seg-js`'s reconstruction was checked against
+[`highdicom`](https://github.com/ImagingDataCommons/highdicom) 0.28 on real SEG files from
+TCIA. Full method and the harness are in
+[`../VALIDATION.md`](../VALIDATION.md) / [`../scripts/validation/`](../scripts/validation/);
+the headline:
+
+| File (TCIA) | Type | Segments | Result |
+|---|---|---|---|
+| C4KC-KiTS `KiTS-00007` | BINARY | 2 (Kidney, Mass) | **voxel-exact** — 122/122 slice checksums identical |
+| NSCLC-Radiomics `LUNG1-005` | BINARY | 6 (Esophagus, GTV, Heart, L/R Lung, Cord) | **voxel-exact** — 546/546 |
+| ISPY1 `ISPY1_1004` | FRACTIONAL / OCCUPANCY | 1 (PE Tumor) | **voxel-exact** — 60/60; raw value sum 22 876 305 matched exactly |
+
+728 `(segment, plane)` slices, every one byte-for-byte identical to highdicom's
+reconstruction (BINARY bit-unpacking included).
+
+### Fractional types in the wild
+
+Of the TCIA collections that publish DICOM SEG, most are `BINARY`. `FRACTIONAL` appears
+mainly in the breast-MRI collections (ISPY1/ISPY2, ACRIN-6698). In the sample checked, the
+declared fractional type was **`OCCUPANCY`** — but the `ISPY1_1004` file's non-zero values
+are **all exactly 255**: it is a binary mask stored as FRACTIONAL, not a graded occupancy
+field. `dicom-seg-js` emits a `FRACTIONAL_VALUES_LOOK_BINARY` diagnostic for exactly this
+case (≥ 98% of non-zero values pinned at `MaximumFractionalValue`). No genuinely graded
+`PROBABILITY` field turned up in the sample; that is consistent with FRACTIONAL SEG being
+rare and usually a thresholded export rather than a raw model head. Treat a FRACTIONAL SEG
+as graded only after checking its value distribution (`thresholdSensitivity`, or the
+diagnostic).

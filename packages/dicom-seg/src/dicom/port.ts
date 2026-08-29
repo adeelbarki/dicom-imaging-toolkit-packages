@@ -7,8 +7,12 @@ import {
   dot,
   normalize,
   sub,
+  GridMismatchError,
   type Diagnostic,
   type GridGeometry,
+  type GridTolerance,
+  type Mask3D,
+  type ScalarField3D,
   type Vec3,
 } from "rt-geometry-js";
 import {
@@ -301,6 +305,28 @@ export function readSegDataset(bytes: ArrayBuffer): ParsedSeg {
           `MaximumFractionalValue (0062,000E) is ${maxRaw === undefined ? "absent" : `invalid (${maxRaw})`}; assuming 255`),
       );
     }
+
+    // Bimodal check (roadmap §7.1): a FRACTIONAL field whose non-zero values are almost all
+    // pinned at the max is a thresholded / binary mask stored as FRACTIONAL, not a graded
+    // probability or occupancy. One pass over the 8-bit pixel bytes.
+    const max = maximumFractionalValue;
+    const nearMax = max - Math.max(1, Math.floor(max * 0.02));
+    let nonZero = 0;
+    let atExtreme = 0;
+    for (let i = 0; i < pixelData.length; i++) {
+      const v = pixelData[i] as number;
+      if (v === 0) continue;
+      nonZero++;
+      if (v >= nearMax) atExtreme++;
+    }
+    if (nonZero > 0 && atExtreme / nonZero >= 0.98) {
+      diagnostics.push(
+        createDiagnostic("FRACTIONAL_VALUES_LOOK_BINARY", "warning",
+          `${((atExtreme / nonZero) * 100).toFixed(1)}% of non-zero values are at (or within 2% of) MaximumFractionalValue ` +
+            `(${max}) — this ${fractionalType ?? "FRACTIONAL"} field is effectively a binary mask stored as FRACTIONAL, ` +
+            `not a graded field`),
+      );
+    }
   }
 
   const segmentsOverlap = ((ds["SegmentsOverlap"] as string | undefined) ?? "UNDEFINED").toUpperCase() as SegmentsOverlap;
@@ -330,6 +356,11 @@ export function readSegDataset(bytes: ArrayBuffer): ParsedSeg {
   };
 }
 
+// The full continuous bitstream, unpacked once per ParsedSeg (BitArray.unpack returns
+// one byte per bit, so this is ~8× the PixelData size — still cheap next to re-unpacking
+// the whole stream for every frame, which is O(frames²) work on a large SEG).
+const continuousBitsCache = new WeakMap<ParsedSeg, Uint8Array>();
+
 /** Unpacked 0/1 bits for BINARY frame `frameIndex` (length rows·columns). */
 export function binaryFrame(parsed: ParsedSeg, frameIndex: number): Uint8Array {
   const rc = parsed.rows * parsed.columns;
@@ -341,9 +372,11 @@ export function binaryFrame(parsed: ParsedSeg, frameIndex: number): Uint8Array {
     for (let i = 0; i < rc; i++) out[i] = bits[i] ? 1 : 0;
     return out;
   }
-  // continuous bitstream: unpack the whole thing once per call is wasteful, but callers
-  // (Segmentation.mask) unpack per segment, not per pixel — fine for v0.1.
-  const allBits = BitArray.unpack(parsed.pixelData) as Uint8Array;
+  let allBits = continuousBitsCache.get(parsed);
+  if (!allBits) {
+    allBits = BitArray.unpack(parsed.pixelData) as Uint8Array;
+    continuousBitsCache.set(parsed, allBits);
+  }
   const base = frameIndex * rc;
   for (let i = 0; i < rc; i++) out[i] = allBits[base + i] ? 1 : 0;
   return out;
@@ -359,15 +392,20 @@ export function fractionalFrame(parsed: ParsedSeg, frameIndex: number): Uint8Arr
 // ---------------------------------------------------------------------------
 // Fixture builder. SEG files are BUILT for tests, never checked in (same rule
 // as rtstruct-js / rtdose-js). Not re-exported from index.ts. PR 3 promotes a
-// hardened version of this to the public `writeSeg`.
+// hardened public `writeSeg` (mask/field based) is defined below and
+// delegates to this.
 // ---------------------------------------------------------------------------
 
-export interface WriteSegSegment {
+export interface EncodeSegSegment {
   readonly number: number;
   readonly label?: string;
   readonly algorithmType?: string;
+  readonly algorithmName?: string;
   readonly category?: CodedConcept;
   readonly propertyType?: CodedConcept;
+  readonly propertyTypeModifier?: CodedConcept;
+  readonly trackingId?: string;
+  readonly trackingUid?: string;
 }
 
 export interface WriteSegFrame {
@@ -377,7 +415,7 @@ export interface WriteSegFrame {
   readonly pixels: ArrayLike<number>;
 }
 
-export interface WriteSegOptions {
+export interface EncodeSegOptions {
   readonly rows: number;
   readonly columns: number;
   readonly segmentationType: SegmentationType;
@@ -389,7 +427,7 @@ export interface WriteSegOptions {
   readonly segmentsOverlap?: SegmentsOverlap;
   readonly fractionalType?: FractionalType;
   readonly maximumFractionalValue?: number;
-  readonly segments: readonly WriteSegSegment[];
+  readonly segments: readonly EncodeSegSegment[];
   readonly frames: readonly WriteSegFrame[];
   /** Override to exercise NotSegmentationError. */
   readonly sopClassUID?: string;
@@ -402,7 +440,7 @@ export interface WriteSegOptions {
   readonly omitMaximumFractionalValue?: boolean;
 }
 
-export function writeSeg(options: WriteSegOptions): ArrayBuffer {
+export function encodeSegFrames(options: EncodeSegOptions): ArrayBuffer {
   const rows = options.rows;
   const columns = options.columns;
   const rc = rows * columns;
@@ -447,22 +485,29 @@ export function writeSeg(options: WriteSegOptions): ArrayBuffer {
     SegmentsOverlap: options.segmentsOverlap ?? "NO",
     FrameOfReferenceUID: options.frameOfReferenceUID ?? DicomMetaDictionary.uid(),
     ContentLabel: "SEG",
-    SegmentSequence: options.segments.map((s) => ({
-      SegmentNumber: s.number,
-      SegmentLabel: s.label ?? `segment-${s.number}`,
-      SegmentAlgorithmType: s.algorithmType ?? "AUTOMATIC",
-      SegmentAlgorithmName: "dicom-seg-js-fixture",
-      SegmentedPropertyCategoryCodeSequence: [
-        s.category
-          ? { CodeValue: s.category.value, CodingSchemeDesignator: s.category.scheme, CodeMeaning: s.category.meaning }
-          : { CodeValue: "T-D0050", CodingSchemeDesignator: "SRT", CodeMeaning: "Tissue" },
-      ],
-      SegmentedPropertyTypeCodeSequence: [
-        s.propertyType
-          ? { CodeValue: s.propertyType.value, CodingSchemeDesignator: s.propertyType.scheme, CodeMeaning: s.propertyType.meaning }
-          : { CodeValue: "T-62000", CodingSchemeDesignator: "SRT", CodeMeaning: "Liver" },
-      ],
-    })),
+    SegmentSequence: options.segments.map((s) => {
+      const code = (c: CodedConcept) => ({
+        CodeValue: c.value,
+        CodingSchemeDesignator: c.scheme,
+        CodeMeaning: c.meaning,
+      });
+      const item: Record<string, unknown> = {
+        SegmentNumber: s.number,
+        SegmentLabel: s.label ?? `segment-${s.number}`,
+        SegmentAlgorithmType: s.algorithmType ?? "AUTOMATIC",
+        SegmentAlgorithmName: s.algorithmName ?? "dicom-seg-js",
+        SegmentedPropertyCategoryCodeSequence: [
+          s.category ? code(s.category) : { CodeValue: "T-D0050", CodingSchemeDesignator: "SRT", CodeMeaning: "Tissue" },
+        ],
+        SegmentedPropertyTypeCodeSequence: [
+          s.propertyType ? code(s.propertyType) : { CodeValue: "T-62000", CodingSchemeDesignator: "SRT", CodeMeaning: "Liver" },
+        ],
+      };
+      if (s.propertyTypeModifier) item["SegmentedPropertyTypeModifierCodeSequence"] = [code(s.propertyTypeModifier)];
+      if (s.trackingId !== undefined) item["TrackingID"] = s.trackingId;
+      if (s.trackingUid !== undefined) item["TrackingUID"] = s.trackingUid;
+      return item;
+    }),
     SharedFunctionalGroupsSequence: [
       {
         PlaneOrientationSequence: [{ ImageOrientationPatient: [...rowDirection, ...columnDirection] }],
@@ -495,4 +540,160 @@ export function writeSeg(options: WriteSegOptions): ArrayBuffer {
   dicomDict.dict[TAG_PIXEL_DATA] = { vr: "OB", Value: [pixelBuffer] };
 
   return dicomDict.write() as ArrayBuffer;
+}
+
+// ---------------------------------------------------------------------------
+// Public writer. Takes a Mask3D per BINARY segment / a ScalarField3D per
+// FRACTIONAL segment, all on one shared GridGeometry, and emits a conformant
+// SEG. Sparse by default (planes a segment doesn't touch produce no frame).
+// ---------------------------------------------------------------------------
+
+export interface WriteSegSegment {
+  readonly number: number;
+  readonly label: string;
+  readonly algorithmType?: string;
+  readonly algorithmName?: string;
+  readonly category?: CodedConcept;
+  readonly propertyType?: CodedConcept;
+  readonly propertyTypeModifier?: CodedConcept;
+  readonly trackingId?: string;
+  readonly trackingUid?: string;
+  /** BINARY — the segment mask. */
+  readonly mask?: Mask3D;
+  /** FRACTIONAL — the segment field (0..1 unless `fieldScale: "raw"`). */
+  readonly field?: ScalarField3D;
+}
+
+export interface WriteSegOptions {
+  readonly segmentationType: SegmentationType;
+  /**
+   * FRACTIONAL only, and **required** — there is no default. PROBABILITY and OCCUPANCY are
+   * different quantities (roadmap §7.1 / FRACTIONAL-SEG.md §1); the writer must be told
+   * which one the values are.
+   */
+  readonly fractionalType?: FractionalType;
+  /** FRACTIONAL only — the stored integer that means 1.0. Default 255 (8-bit ceiling). */
+  readonly maximumFractionalValue?: number;
+  /**
+   * How `segment.field` values are read. `"unit"` (default): they are in `[0, 1]` and get
+   * multiplied by `maximumFractionalValue`. `"raw"`: they are already integers in
+   * `[0, maximumFractionalValue]`.
+   */
+  readonly fieldScale?: "unit" | "raw";
+  readonly segments: readonly WriteSegSegment[];
+  /** Default `"NO"` for one segment, `"UNDEFINED"` for more. */
+  readonly segmentsOverlap?: SegmentsOverlap;
+  /** Default: the shared geometry's `frameOfReferenceUID`, else a fresh UID. */
+  readonly frameOfReferenceUID?: string;
+  readonly contentLabel?: string;
+  readonly tolerance?: GridTolerance;
+}
+
+export function writeSeg(options: WriteSegOptions): ArrayBuffer {
+  const isBinary = options.segmentationType === "BINARY";
+  if (options.segmentationType !== "BINARY" && options.segmentationType !== "FRACTIONAL") {
+    throw new TypeError(`writeSeg: segmentationType must be "BINARY" or "FRACTIONAL", got ${JSON.stringify(options.segmentationType)}`);
+  }
+  if (!isBinary && options.fractionalType === undefined) {
+    throw new TypeError(
+      'writeSeg: a FRACTIONAL segmentation requires an explicit fractionalType ("PROBABILITY" or "OCCUPANCY") — ' +
+        "there is no default (FRACTIONAL-SEG.md §1)",
+    );
+  }
+  if (options.segments.length === 0) throw new RangeError("writeSeg: at least one segment is required");
+
+  const numbers = new Set<number>();
+  for (const s of options.segments) {
+    if (!Number.isInteger(s.number) || s.number <= 0) {
+      throw new RangeError(`writeSeg: segment number must be a positive integer, got ${s.number}`);
+    }
+    if (numbers.has(s.number)) throw new RangeError(`writeSeg: duplicate segment number ${s.number}`);
+    numbers.add(s.number);
+  }
+
+  const maxFractional = options.maximumFractionalValue ?? 255;
+  if (!isBinary && (!Number.isInteger(maxFractional) || maxFractional < 1 || maxFractional > 255)) {
+    throw new RangeError(`writeSeg: maximumFractionalValue must be an integer in [1, 255], got ${maxFractional}`);
+  }
+  const rawScale = options.fieldScale === "raw";
+
+  const structures = options.segments.map((s) => {
+    const structure = isBinary ? s.mask : s.field;
+    if (!structure) {
+      throw new TypeError(`writeSeg: segment ${s.number} is missing its ${isBinary ? "mask" : "field"}`);
+    }
+    return structure;
+  });
+  const geometry = (structures[0] as Mask3D | ScalarField3D).geometry;
+  for (let i = 1; i < structures.length; i++) {
+    if (!(structures[i] as Mask3D | ScalarField3D).geometry.equals(geometry, options.tolerance)) {
+      throw new GridMismatchError(
+        `writeSeg: segment ${options.segments[i]!.number}'s ${isBinary ? "mask" : "field"} is on a different grid than segment ${options.segments[0]!.number}'s — every segment must share one GridGeometry`,
+      );
+    }
+  }
+
+  const columns = geometry.columns;
+  const rows = geometry.rows;
+  const rc = columns * rows;
+  const planeCount = geometry.planes.length;
+  const planePositions = geometry.planes.map((p) => p.position);
+  const sliceThickness = planeCount >= 2 ? geometry.planeThicknessMm(0) : 1;
+
+  // One frame per (segment, plane) across the whole shared geometry — so
+  // writeSeg → readSeg is an exact identity on the grid, empty planes included.
+  // (Real files usually omit all-zero frames; reading handles that, sparse
+  // *writing* is a later feature.)
+  const frames: WriteSegFrame[] = [];
+  options.segments.forEach((s, si) => {
+    const structure = structures[si]!;
+    for (let k = 0; k < planeCount; k++) {
+      const slice = (structure as Mask3D | ScalarField3D).getSliceBuffer(k);
+      const pixels = new Uint8Array(rc);
+      for (let i = 0; i < rc; i++) {
+        const v = slice[i] as number;
+        if (isBinary) {
+          pixels[i] = v !== 0 ? 1 : 0;
+        } else {
+          let stored = Math.round(rawScale ? v : v * maxFractional);
+          if (stored < 0) stored = 0;
+          if (stored > maxFractional) stored = maxFractional;
+          pixels[i] = stored;
+        }
+      }
+      frames.push({ segmentNumber: s.number, position: planePositions[k] as Vec3, pixels });
+    }
+  });
+
+  const segmentsOverlap: SegmentsOverlap =
+    options.segmentsOverlap ?? (options.segments.length === 1 ? "NO" : "UNDEFINED");
+
+  const encodeOptions: EncodeSegOptions = {
+    rows,
+    columns,
+    segmentationType: options.segmentationType,
+    rowDirection: geometry.rowDirection as Vec3,
+    columnDirection: geometry.columnDirection as Vec3,
+    pixelSpacing: geometry.pixelSpacing as readonly [number, number],
+    sliceThickness,
+    segmentsOverlap,
+    segments: options.segments.map((s) => ({
+      number: s.number,
+      label: s.label,
+      algorithmType: s.algorithmType ?? "AUTOMATIC",
+      algorithmName: s.algorithmName ?? "dicom-seg-js",
+      ...(s.category ? { category: s.category } : {}),
+      ...(s.propertyType ? { propertyType: s.propertyType } : {}),
+      ...(s.propertyTypeModifier ? { propertyTypeModifier: s.propertyTypeModifier } : {}),
+      ...(s.trackingId !== undefined ? { trackingId: s.trackingId } : {}),
+      ...(s.trackingUid !== undefined ? { trackingUid: s.trackingUid } : {}),
+    })),
+    frames,
+    ...(options.frameOfReferenceUID ?? geometry.frameOfReferenceUID
+      ? { frameOfReferenceUID: (options.frameOfReferenceUID ?? geometry.frameOfReferenceUID) as string }
+      : {}),
+    ...(isBinary ? {} : { fractionalType: options.fractionalType, maximumFractionalValue: maxFractional }),
+  };
+
+  return encodeSegFrames(encodeOptions);
 }

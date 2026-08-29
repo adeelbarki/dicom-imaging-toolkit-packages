@@ -1,9 +1,11 @@
-import { writeSeg, type WriteSegOptions, type WriteSegFrame } from "../src/dicom/port.js";
+import { encodeSegFrames, type EncodeSegOptions, type WriteSegFrame } from "../src/dicom/port.js";
 import type { Vec3 } from "rt-geometry-js";
 
-/** Fixtures are BUILT, never checked in — same rule as rtstruct-js / rtdose-js. */
-export { writeSeg };
-export type { WriteSegOptions, WriteSegFrame };
+/** Fixtures are BUILT, never checked in — same rule as rtstruct-js / rtdose-js.
+ *  `encodeSegFrames` is the low-level frame builder; the public `writeSeg` (mask/field
+ *  based) is tested directly in roundtrip.test.ts. */
+export { encodeSegFrames };
+export type { EncodeSegOptions, WriteSegFrame };
 
 /**
  * A BINARY SEG whose pixel at (column, row) of segment `s` on the plane at `z = zStep·k`
@@ -31,7 +33,7 @@ export function binarySeg(params: {
       frames.push({ segmentNumber: s, position: [0, 0, k * zStep] as Vec3, pixels });
     }
   }
-  const opts: WriteSegOptions = {
+  const opts: EncodeSegOptions = {
     rows: params.rows,
     columns: params.columns,
     segmentationType: "BINARY",
@@ -42,7 +44,7 @@ export function binarySeg(params: {
     ...(params.frameOfReferenceUID ? { frameOfReferenceUID: params.frameOfReferenceUID } : {}),
     ...(params.segmentsOverlap ? { segmentsOverlap: params.segmentsOverlap } : {}),
   };
-  return writeSeg(opts);
+  return encodeSegFrames(opts);
 }
 
 /**
@@ -70,7 +72,7 @@ export function fractionalSeg(params: {
       frames.push({ segmentNumber: s, position: [0, 0, k * zStep] as Vec3, pixels });
     }
   }
-  return writeSeg({
+  return encodeSegFrames({
     rows: params.rows,
     columns: params.columns,
     segmentationType: "FRACTIONAL",
