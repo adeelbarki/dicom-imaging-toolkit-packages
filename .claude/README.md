@@ -1509,3 +1509,75 @@ in `dist/histogram.d.ts`.
 
 Publish-order reminder (learned in Phase E): when `dicom-seg-js` ships,
 publish `rt-geometry-js` 0.1.2 **first**, then the domain package.
+
+## Phase F PR 2 — dicom-seg-js 0.1.0 read (2026-08-29)
+
+Branch `feat/dicom-seg-read`. `packages/dicom-seg/` on the rtdose pattern
+(peer `rt-geometry-js ^0.1.2`; `paths` alias for dev/test + `paths: {}` in
+`tsconfig.build.json`; vitest `resolve.alias`; `dcmjs` the only runtime
+dep, `createRequire` in one `src/dicom/port.ts`).
+
+dcmjs SEG facts confirmed by probe before writing the parser:
+- `SegmentSequence`, `SegmentationType`, `SegmentsOverlap`,
+  `MaximumFractionalValue`, `SegmentationFractionalType` all naturalise
+  straight.
+- `SharedFunctionalGroupsSequence[0]` →
+  `PlaneOrientationSequence[0].ImageOrientationPatient`,
+  `PixelMeasuresSequence[0].PixelSpacing`.
+- `PerFrameFunctionalGroupsSequence[i]` →
+  `SegmentIdentificationSequence[0].ReferencedSegmentNumber`,
+  `PlanePositionSequence[0].ImagePositionPatient` — one item per frame, in
+  PixelData frame order.
+- `PixelData` naturalises to `[ArrayBuffer]`. BINARY = one **continuous**
+  bitstream (dcmjs writes `ceil(frames·rows·cols/8)` bytes, no inter-frame
+  padding); `BitArray.unpack` returns 0/**255** per bit (not 0/1), length
+  rounded up to a byte. `BitArray.pack` takes 0/1, LSB-first.
+
+`src/dicom/port.ts`:
+- `readSegDataset(bytes)` → `ParsedSeg`: type, fractionalType,
+  maximumFractionalValue, segmentsOverlap, `GridGeometry` (distinct frame
+  positions, deduped within `DEFAULT_TOLERANCE.positionMm`, sorted by
+  `createGridGeometry`), segments[], frames[] (`{ segmentNumber,
+  planeIndex, frameIndex }` — planeIndex by nearest projected position),
+  raw `pixelData` Uint8Array, `binaryFramesByteAligned`, diagnostics.
+- `binaryFrame(parsed, i)` / `fractionalFrame(parsed, i)` — per-frame
+  0/1 bits (continuous or byte-aligned) / 8-bit byte slice.
+- `writeSeg(options)` — fixture builder (BINARY via `BitArray.pack`,
+  FRACTIONAL 8-bit). NOT re-exported from index.ts; PR 3 promotes a
+  hardened version to the public `writeSeg`. Test knobs: `forceType`
+  (LABELMAP), `omitFractionalType`, `omitMaximumFractionalValue`,
+  `sopClassUID`/`modality`.
+
+`src/index.ts` — `Segmentation` class + `readSeg(bytes)`:
+- `segments()`, `hasSegment(n)`, `type`, `fractionalType`,
+  `maximumFractionalValue`, `segmentsOverlap`, `geometry`,
+  `frameOfReferenceUID`, `contentLabel`, `diagnostics`.
+- `mask(n)` (BINARY, memoised), `field(n)` / `rawField(n)` (FRACTIONAL,
+  memoised; `field` divides by max, `rawField` doesn't), `support(n)`
+  (mask for BINARY, nonzero voxels for FRACTIONAL), `sampleConfidence(n,
+  point)` (`sampleFieldAt` on the field, trilinear, oob 0).
+- `mask()` on FRACTIONAL / `field()` on BINARY →
+  `SegmentationTypeMismatchError` (roadmap §7.1 — no implicit threshold).
+- `export * from "rt-geometry-js"` so `meanValue` /
+  `volumeAboveThreshold` / `thresholdSensitivity` compose from one import.
+  No accuracy/%-correct anything (§7.2).
+
+Errors: `NotSegmentationError`, `MalformedSegmentationError`,
+`UnsupportedSegmentationTypeError` (LABELMAP → 0.2.0),
+`SegmentationTypeMismatchError`.
+
+Diagnostics: `FRACTIONAL_TYPE_ABSENT`, `MISSING_MAX_FRACTIONAL_VALUE`,
+`SEGMENTS_OVERLAP`, `BINARY_FRAMES_BYTE_ALIGNED`,
+`PER_FRAME_ORIENTATION_VARIES`. The bimodal-OCCUPANCY-looks-thresholded
+heuristic (§7.1) is deferred to PR 4 with the real-data distribution work.
+
+`docs/FRACTIONAL-SEG.md` §1–3 written (PROBABILITY vs OCCUPANCY,
+confidence≠accuracy + calibration, display guidance); §4 validation is a
+PR 4 stub.
+
+20 tests (PARSE-01..10, SEG-01..10). 203 total (95 + 64 + 24 + 20);
+typecheck + build clean; bare `rt-geometry-js` specifier in `dist/`;
+`check:deps` sees 4 packages, no script change.
+
+Publish order when 0.1.0 ships: `rt-geometry-js` 0.1.2 (still unpublished —
+only 0.1.1 on npm) FIRST, then `dicom-seg-js`.
