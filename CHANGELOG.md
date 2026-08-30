@@ -14,9 +14,18 @@ changelog:
 |---|---|---|
 | `rt-geometry-js` | 1.1.0 | published |
 | `rtstruct-js` | 0.4.0 | published |
-| `rtdose-js` | 0.1.1 | published |
+| `rtdose-js` | 0.2.0 | publish pending |
 | `dicom-seg-js` | 0.2.0 | published |
-| `rt-convert-js` | 0.1.1 | publish pending |
+| `rt-convert-js` | 0.1.1 | published |
+
+## 2026-08-30 — RTDOSE sub-voxel supersampling
+
+- **`rtdose-js` → 0.2.0** (additive): `volumePolicy: "supersample"` on `statistics` /
+  `getD` / `getV` / `calculateDVH` — split each structure voxel `k³` ways (`k` in
+  `[2, 4]`, default `2`) and sample the raw dose at every sub-voxel centre, for small
+  structures sitting in a steep gradient. Default path unchanged; the `dicompyler-core`
+  harness was re-run and still lands 194/195. The last carry-over from the
+  `feat/reviews-phase-0-geometry-1.0` branch (its WIP commit) — now finished.
 
 ## 2026-08-30 — reviews-phase-0 split complete
 

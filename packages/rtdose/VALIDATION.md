@@ -141,3 +141,9 @@ confirms it is applied. `GridFrameOffsetVector` starts at 0 and is ascending on 
 - No `DoseSummationType BEAM` or `MULTI_PLAN` case.
 - No non-zero `GridFrameOffsetVector` origin or reversed frame order seen in the wild yet
   (only synthetic coverage in `tests/unit/port.test.ts`).
+- **`volumePolicy: "supersample"` (0.2.0) is not part of this comparison.** `dicompyler-core`
+  has no sub-voxel mode, so there is nothing to diff against; it is covered by analytic
+  tests only (`tests/unit/supersample.test.ts` — a known linear gradient across a single
+  voxel). The 194/195 figure above is the **default** (`"whole-voxel-binary"`) path, which
+  0.2.0 leaves byte-for-byte unchanged — the harness was re-run at 0.2.0 and reproduced it
+  exactly (003 64/65, 014 65/65, 030 65/65).

@@ -1,8 +1,11 @@
 import {
+  add,
   createScalarField,
+  FrameOfReferenceMismatchError,
   histogram,
   resampleField,
   sampleFieldAt,
+  scale,
   valueAtVolumeFraction,
   volumeAboveThreshold,
   type Diagnostic,
@@ -27,6 +30,78 @@ import type {
 
 const DEFAULT_INTERPOLATION: InterpMethod = "trilinear";
 const DEFAULT_DVH_BINS = 256;
+const DEFAULT_SUPERSAMPLING = 2;
+
+/** `k` for `volumePolicy: "supersample"`, validated. `undefined` for the whole-voxel path. */
+function resolveSupersampling(opts: DoseQueryOptions): number | undefined {
+  if (opts.volumePolicy !== "supersample") return undefined;
+  const k = opts.supersampling ?? DEFAULT_SUPERSAMPLING;
+  if (!Number.isInteger(k) || k < 2 || k > 4) {
+    throw new RangeError(`supersampling must be an integer in [2, 4], got ${k}`);
+  }
+  return k;
+}
+
+/** `V(d)` over pre-collected samples — total volume with `value >= threshold`. */
+function vAtDose(values: readonly number[], volumes: readonly number[], threshold: number): number {
+  let volume = 0;
+  for (let i = 0; i < values.length; i++) {
+    if ((values[i] as number) >= threshold) volume += volumes[i] as number;
+  }
+  return volume;
+}
+
+/**
+ * `D(x)` over pre-collected samples — mirrors `rt-geometry-js`'s `valueAtVolumeFraction`
+ * (sort by value descending, accumulate volume, return the value where the running total
+ * first reaches `fraction` of the whole). Step function, no interpolation.
+ */
+function dAtVolumeFraction(values: readonly number[], volumes: readonly number[], fraction: number): number {
+  const order = values.map((_, i) => i).sort((a, b) => (values[b] as number) - (values[a] as number));
+  let total = 0;
+  for (const v of volumes) total += v;
+  const target = fraction * total;
+  let cumulative = 0;
+  let last = values[order[0] as number] as number;
+  for (const i of order) {
+    cumulative += volumes[i] as number;
+    last = values[i] as number;
+    if (cumulative >= target) return last;
+  }
+  return last;
+}
+
+/** Cumulative DVH points from pre-collected samples — same bin layout as `histogram()`. */
+function dvhFromSamples(
+  values: readonly number[],
+  volumes: readonly number[],
+  bins: number,
+  maxDose: number,
+  totalVolumeMm3: number,
+): DvhPoint[] {
+  const max = maxDose > 0 ? maxDose : 1;
+  const width = max / bins;
+  const perBin = new Array<number>(bins).fill(0);
+  for (let i = 0; i < values.length; i++) {
+    let b = Math.floor((values[i] as number) / width);
+    if (b < 0) b = 0;
+    if (b >= bins) b = bins - 1;
+    perBin[b] = (perBin[b] as number) + (volumes[i] as number);
+  }
+  const suffix = new Array<number>(bins + 1).fill(0);
+  for (let i = bins - 1; i >= 0; i--) suffix[i] = (suffix[i + 1] as number) + (perBin[i] as number);
+
+  const points: DvhPoint[] = [];
+  for (let i = 0; i <= bins; i++) {
+    const volumeMm3 = suffix[i] as number;
+    points.push({
+      doseGy: i * width,
+      volumeMm3,
+      volumeFraction: totalVolumeMm3 > 0 ? volumeMm3 / totalVolumeMm3 : 0,
+    });
+  }
+  return points;
+}
 
 /**
  * A parsed RT Dose grid and the dose-volume queries over it.
@@ -36,11 +111,13 @@ const DEFAULT_DVH_BINS = 256;
  * `method` (roadmap §6.4) and `docs/DVH-METHOD.md` states the resampling, interpolation,
  * and partial-volume choices so a TPS disagreement is explicable.
  *
- * All mask-based queries resample the dose field **onto the structure mask's grid**
- * (roadmap §6.1 default — sample dose at structure voxel centres), trilinear by default,
- * then run `rt-geometry-js`'s histogram engine. The resample per `(maskGeometry, method)`
- * is memoised, so calling `statistics` / `calculateDVH` / `getD` / `getV` for one ROI
- * costs one resample, not four.
+ * By default every mask-based query resamples the dose field **onto the structure mask's
+ * grid** (roadmap §6.1 default — sample dose at structure voxel centres), trilinear by
+ * default, then runs `rt-geometry-js`'s histogram engine; the resample per
+ * `(maskGeometry, method)` is memoised. Passing `volumePolicy: "supersample"` instead
+ * splits each structure voxel `k³` ways and samples the raw dose field at every sub-voxel
+ * centre — no resample, `k³`× the sampling work, and it moves D95/V20 on small structures
+ * sitting in a steep gradient (see `docs/DVH-METHOD.md`).
  */
 export class DoseGrid {
   /** Dose grid geometry, planes ascending along the normal. */
@@ -96,7 +173,8 @@ export class DoseGrid {
   /** Min / max / volume-weighted mean dose over `mask`. Throws `RangeError` if `mask` is empty. */
   statistics(mask: Mask3D, opts: DoseQueryOptions = {}): DoseStatistics {
     const method = opts.method ?? DEFAULT_INTERPOLATION;
-    const s = this.samplesOver(mask, method);
+    const k = resolveSupersampling(opts);
+    const s = this.samplesOver(mask, method, k);
     if (s.values.length === 0) {
       throw new RangeError("cannot compute dose statistics over a mask with no occupied voxels");
     }
@@ -114,8 +192,8 @@ export class DoseGrid {
       maxGy: max,
       meanGy: weighted / s.totalVolumeMm3,
       volumeMm3: s.totalVolumeMm3,
-      voxelCount: s.values.length,
-      method: this.methodInfo(method, s.resampled),
+      voxelCount: s.voxelCount,
+      method: this.methodInfo(method, s.resampled, k),
     };
   }
 
@@ -130,8 +208,8 @@ export class DoseGrid {
     if (!Number.isInteger(bins) || bins <= 0) {
       throw new RangeError(`bins must be a positive integer, got ${bins}`);
     }
-    const { field, resampled } = this.fieldOn(mask.geometry, method);
-    const s = this.samplesOver(mask, method);
+    const k = resolveSupersampling(opts);
+    const s = this.samplesOver(mask, method, k);
     if (s.values.length === 0) {
       throw new RangeError("cannot compute a DVH over a mask with no occupied voxels");
     }
@@ -143,20 +221,26 @@ export class DoseGrid {
       if (v > maxDose) maxDose = v;
       weighted += v * (s.volumes[i] as number);
     }
-
-    const h = histogram(field, mask, { bins, min: 0, max: maxDose > 0 ? maxDose : 1 });
-    const suffix = new Array<number>(bins + 1).fill(0);
-    for (let i = bins - 1; i >= 0; i--) suffix[i] = (suffix[i + 1] as number) + (h.volumesMm3[i] ?? 0);
     const total = s.totalVolumeMm3;
 
-    const points: DvhPoint[] = [];
-    for (let i = 0; i <= bins; i++) {
-      const volumeMm3 = suffix[i] as number;
-      points.push({
-        doseGy: h.binEdges[i] as number,
-        volumeMm3,
-        volumeFraction: total > 0 ? volumeMm3 / total : 0,
-      });
+    let points: DvhPoint[];
+    if (k === undefined) {
+      // Whole-voxel path: byte-identical to pre-0.2.0 — histogram the resampled field.
+      const { field } = this.fieldOn(mask.geometry, method);
+      const h = histogram(field, mask, { bins, min: 0, max: maxDose > 0 ? maxDose : 1 });
+      const suffix = new Array<number>(bins + 1).fill(0);
+      for (let i = bins - 1; i >= 0; i--) suffix[i] = (suffix[i + 1] as number) + (h.volumesMm3[i] ?? 0);
+      points = [];
+      for (let i = 0; i <= bins; i++) {
+        const volumeMm3 = suffix[i] as number;
+        points.push({
+          doseGy: h.binEdges[i] as number,
+          volumeMm3,
+          volumeFraction: total > 0 ? volumeMm3 / total : 0,
+        });
+      }
+    } else {
+      points = dvhFromSamples(s.values, s.volumes, bins, maxDose, total);
     }
 
     return {
@@ -166,7 +250,7 @@ export class DoseGrid {
       meanDoseGy: weighted / total,
       bins,
       points,
-      method: this.methodInfo(method, resampled),
+      method: this.methodInfo(method, s.resampled, k),
     };
   }
 
@@ -180,13 +264,24 @@ export class DoseGrid {
       throw new RangeError(`percent must be in [0, 100], got ${percent}`);
     }
     const method = opts.method ?? DEFAULT_INTERPOLATION;
-    const { field, resampled } = this.fieldOn(mask.geometry, method);
     const fraction = percent / 100;
-    return {
-      doseGy: valueAtVolumeFraction(field, mask, fraction),
-      volumeFraction: fraction,
-      method: this.methodInfo(method, resampled),
-    };
+    const k = resolveSupersampling(opts);
+
+    let doseGy: number;
+    let resampled: boolean;
+    if (k === undefined) {
+      const on = this.fieldOn(mask.geometry, method);
+      doseGy = valueAtVolumeFraction(on.field, mask, fraction);
+      resampled = on.resampled;
+    } else {
+      const s = this.samplesOver(mask, method, k);
+      if (s.values.length === 0) {
+        throw new RangeError("cannot compute a dose-at-volume for a mask with no occupied voxels");
+      }
+      doseGy = dAtVolumeFraction(s.values, s.volumes, fraction);
+      resampled = s.resampled;
+    }
+    return { doseGy, volumeFraction: fraction, method: this.methodInfo(method, resampled, k) };
   }
 
   /**
@@ -196,28 +291,53 @@ export class DoseGrid {
    */
   getV(doseGy: number, mask: Mask3D, opts: DoseQueryOptions = {}): VolumeAtDose {
     const method = opts.method ?? DEFAULT_INTERPOLATION;
-    const { field, resampled } = this.fieldOn(mask.geometry, method);
-    const totalMm3 = mask.volume({ method: "voxel" }).valueMm3;
-    if (totalMm3 <= 0) {
-      throw new RangeError("cannot compute a volume-at-dose for a mask with no occupied voxels");
+    const k = resolveSupersampling(opts);
+
+    let volumeMm3: number;
+    let totalMm3: number;
+    let resampled: boolean;
+    if (k === undefined) {
+      const on = this.fieldOn(mask.geometry, method);
+      totalMm3 = mask.volume({ method: "voxel" }).valueMm3;
+      if (totalMm3 <= 0) {
+        throw new RangeError("cannot compute a volume-at-dose for a mask with no occupied voxels");
+      }
+      volumeMm3 = volumeAboveThreshold(on.field, mask, doseGy);
+      resampled = on.resampled;
+    } else {
+      const s = this.samplesOver(mask, method, k);
+      if (s.values.length === 0) {
+        throw new RangeError("cannot compute a volume-at-dose for a mask with no occupied voxels");
+      }
+      totalMm3 = s.totalVolumeMm3;
+      volumeMm3 = vAtDose(s.values, s.volumes, doseGy);
+      resampled = s.resampled;
     }
-    const volumeMm3 = volumeAboveThreshold(field, mask, doseGy);
     return {
       doseGy,
       volumeMm3,
       volumeFraction: volumeMm3 / totalMm3,
-      method: this.methodInfo(method, resampled),
+      method: this.methodInfo(method, resampled, k),
     };
   }
 
   // -- internals ------------------------------------------------------------
 
-  private methodInfo(interpolation: InterpMethod, resampled: boolean): DoseMethod {
+  private methodInfo(interpolation: InterpMethod, resampled: boolean, k?: number): DoseMethod {
+    if (k === undefined) {
+      return {
+        resampling: "dose-sampled-at-structure-voxel-centres",
+        interpolation,
+        volumePolicy: "whole-voxel-binary",
+        resampledToMaskGrid: resampled,
+      };
+    }
     return {
-      resampling: "dose-sampled-at-structure-voxel-centres",
+      resampling: "dose-sampled-at-structure-subvoxel-centres",
       interpolation,
-      volumePolicy: "whole-voxel-binary",
-      resampledToMaskGrid: resampled,
+      volumePolicy: "supersampled",
+      supersampling: k,
+      resampledToMaskGrid: false,
     };
   }
 
@@ -241,29 +361,97 @@ export class DoseGrid {
     return { field: resampledField, resampled: true };
   }
 
-  /** Every occupied voxel of `mask`, paired with its dose value and physical volume. */
+  /**
+   * Every occupied voxel of `mask`, paired with its dose value(s) and physical volume(s).
+   *
+   * `k` undefined — one sample per voxel, the dose field resampled onto the mask grid.
+   * `k` set — `k³` sub-voxel samples per voxel, each `voxelVolume / k³`, the raw dose field
+   * point-sampled at every sub-voxel centre (no resample; `resampled` is always `false`).
+   * A cross-frame-of-reference mask throws `FrameOfReferenceMismatchError`, matching the
+   * whole-voxel path (which throws it via `resampleField`).
+   */
   private samplesOver(
     mask: Mask3D,
     method: InterpMethod,
-  ): { field: ScalarField3D; resampled: boolean; values: number[]; volumes: number[]; totalVolumeMm3: number } {
-    const { field, resampled } = this.fieldOn(mask.geometry, method);
+    k?: number,
+  ): {
+    resampled: boolean;
+    values: number[];
+    volumes: number[];
+    totalVolumeMm3: number;
+    voxelCount: number;
+  } {
     const g = mask.geometry;
     const areaMm2 = g.pixelSpacing[0] * g.pixelSpacing[1];
     const values: number[] = [];
     const volumes: number[] = [];
     let totalVolumeMm3 = 0;
-    for (let k = 0; k < g.planes.length; k++) {
-      const voxelVolumeMm3 = areaMm2 * g.planeThicknessMm(k);
-      const maskSlice = mask.getSliceBuffer(k);
-      const fieldSlice = field.getSliceBuffer(k);
-      for (let i = 0; i < maskSlice.length; i++) {
-        if (maskSlice[i] !== 0) {
-          values.push(fieldSlice[i] as number);
-          volumes.push(voxelVolumeMm3);
-          totalVolumeMm3 += voxelVolumeMm3;
+    let voxelCount = 0;
+
+    if (k === undefined) {
+      const { field, resampled } = this.fieldOn(g, method);
+      for (let plane = 0; plane < g.planes.length; plane++) {
+        const voxelVolumeMm3 = areaMm2 * g.planeThicknessMm(plane);
+        const maskSlice = mask.getSliceBuffer(plane);
+        const fieldSlice = field.getSliceBuffer(plane);
+        for (let i = 0; i < maskSlice.length; i++) {
+          if (maskSlice[i] !== 0) {
+            values.push(fieldSlice[i] as number);
+            volumes.push(voxelVolumeMm3);
+            totalVolumeMm3 += voxelVolumeMm3;
+            voxelCount++;
+          }
+        }
+      }
+      return { resampled, values, volumes, totalVolumeMm3, voxelCount };
+    }
+
+    // Supersample: sample the raw dose field at k³ sub-voxel centres.
+    const fa = this.geometry.frameOfReferenceUID;
+    const fb = g.frameOfReferenceUID;
+    if (fa !== undefined && fb !== undefined && fa !== fb) {
+      throw new FrameOfReferenceMismatchError(
+        `cannot supersample dose from frame of reference "${fa}" into structure frame "${fb}" — ` +
+          "the coordinate systems are not physically comparable",
+      );
+    }
+    const rowDir = g.rowDirection;
+    const colDir = g.columnDirection;
+    const normal = g.normal();
+    const psCol = g.pixelSpacing[1]; // step per column, along rowDirection
+    const psRow = g.pixelSpacing[0]; // step per row, along columnDirection
+    const columns = g.columns;
+    const rows = g.rows;
+    const subVol = 1 / (k * k * k);
+    // Fractional offsets of the k sub-centres within a unit voxel, in [-0.5, 0.5).
+    const frac: number[] = [];
+    for (let i = 0; i < k; i++) frac.push((i + 0.5) / k - 0.5);
+
+    for (let plane = 0; plane < g.planes.length; plane++) {
+      const thick = g.planeThicknessMm(plane);
+      const voxelVolumeMm3 = areaMm2 * thick;
+      const subVolumeMm3 = voxelVolumeMm3 * subVol;
+      const maskSlice = mask.getSliceBuffer(plane);
+      for (let row = 0; row < rows; row++) {
+        for (let column = 0; column < columns; column++) {
+          if (maskSlice[row * columns + column] === 0) continue;
+          voxelCount++;
+          const centre = g.indexToPatient(column, row, plane);
+          for (const dz of frac) {
+            for (const dy of frac) {
+              for (const dx of frac) {
+                let p: Vec3 = add(centre, scale(rowDir, dx * psCol));
+                p = add(p, scale(colDir, dy * psRow));
+                p = add(p, scale(normal, dz * thick));
+                values.push(sampleFieldAt(this.field, p, { method, outOfBounds: 0 }));
+                volumes.push(subVolumeMm3);
+                totalVolumeMm3 += subVolumeMm3;
+              }
+            }
+          }
         }
       }
     }
-    return { field, resampled, values, volumes, totalVolumeMm3 };
+    return { resampled: false, values, volumes, totalVolumeMm3, voxelCount };
   }
 }
