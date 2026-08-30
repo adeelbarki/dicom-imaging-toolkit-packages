@@ -13,6 +13,15 @@ lossy step recorded in provenance.
   step (`provenance.lossySteps` is empty) — the contours were rasterized to voxels by
   `RTStruct.load`, before the conversion. Options carry `SegmentNumber` / `SegmentLabel` /
   coded `category` / `propertyType` / `FrameOfReferenceUID` / `ContentLabel`.
+- `segToRtstruct(seg, segmentNumber, options?)` — one **BINARY** SEG segment → single-ROI
+  RTSTRUCT on the SEG's own grid. Async. The mask is traced to contours (`rtstruct-js`'s
+  vectorizer); the returned `provenance.lossySteps` carries one `mask-vectorization` step
+  with the **measured** round trip for that structure — `voxelsBefore`, `voxelsAfter`,
+  `voxelDisagreement`, `dice` (`segToRtstruct` re-rasterizes what it wrote and compares).
+  A `FRACTIONAL` SEG throws `MissingThresholdError` (RTSTRUCT has no per-voxel value; the
+  `threshold` option arrives in the next release). Options carry `roiName` /
+  `interpretedType` / `referencedFrameOfReferenceUID`; the SEG's coded category/type is
+  not auto-translated to `RTROIInterpretedType`.
 - `ConversionResult` = `{ bytes, provenance }`. `ConversionProvenance` records the
   direction, the shared grid, the written voxel count, `lossySteps`, and free-text `notes`
   (including diagnostics carried across from the source object).

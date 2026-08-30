@@ -37,20 +37,36 @@ clinician-drawn or semi-automated); override it if you know better.
 
 ## SEG → RTSTRUCT
 
-*(Implemented in a later PR — this section describes the intended contract.)*
+`segToRtstruct(seg, segmentNumber, options?)` writes one ROI on the SEG's own grid
+(`Segmentation.geometry`). Up to two lossy steps apply, in order.
 
-Two lossy steps, in order:
+### 1. `fractional-threshold` — FRACTIONAL SEG only *(arrives in a later PR)*
 
-1. **`fractional-threshold`** (FRACTIONAL SEG only). RTSTRUCT has no per-voxel value, so a
-   `FRACTIONAL` field must be cut to a binary mask at a caller-supplied `threshold`. There
-   is **no default** — `segToRtstruct` throws `MissingThresholdError` if the SEG is
-   `FRACTIONAL` and no threshold is given. The step records the threshold, its scale
-   (`unit` against the rescaled `[0,1]` field, or `raw` against the stored integers), the
-   SEG's declared `SegmentationFractionalType` (a value means something different under
-   PROBABILITY vs OCCUPANCY), `MaximumFractionalValue`, and the voxel count before/after.
+RTSTRUCT has no per-voxel value, so a `FRACTIONAL` field must be cut to a binary mask at a
+caller-supplied threshold. There is **no default** — a `FRACTIONAL` SEG passed to
+`segToRtstruct` throws `MissingThresholdError`. Until the threshold option lands, cut the
+field yourself (`seg.field(n)` + your own comparison → a `BINARY` SEG) and convert that.
+The step will record the threshold, its scale (`unit` against the rescaled `[0,1]` field,
+or `raw` against the stored integers), the declared `SegmentationFractionalType` (0.7 means
+something different under PROBABILITY vs OCCUPANCY), `MaximumFractionalValue`, and the
+voxel count before/after.
 
-2. **`mask-vectorization`**. The binary mask is traced to polygon contours, one per
-   connected component per plane, holes handled as `rtstruct-js` handles them. This is the
-   inverse of rasterization and is not exact: re-rasterizing the contours onto the same
-   grid can differ from the source mask by boundary voxels. The step records that it ran;
-   the magnitude for real data is reported in `VALIDATION.md`.
+### 2. `mask-vectorization` — always
+
+The binary mask is traced to polygon contours (one loop per connected component per plane;
+holes handled as `rtstruct-js` handles them) and written as the ROI's `ContourSequence`.
+This is the inverse of rasterization and is not exact — re-rasterizing the contours onto
+the same grid can differ from the source mask by boundary voxels.
+
+`segToRtstruct` **measures this round trip for your structure**: it re-loads the RTSTRUCT
+it just wrote onto the SEG's grid and compares. The step carries `voxelsBefore`,
+`voxelsAfter`, `voxelDisagreement` (symmetric), and `dice` (`1.0` for grid-aligned shapes;
+a little below for curved boundaries). So the provenance reflects the actual fidelity of
+the conversion you ran, not a generic figure. Aggregate numbers across real TCIA files are
+in `VALIDATION.md`.
+
+`RTROIInterpretedType` defaults to the writer's `"ORGAN"`. The SEG's coded
+`SegmentedPropertyCategory` / `SegmentedPropertyType` is **not** auto-translated to it —
+the vocabularies do not line up, and a guess would fabricate a clinical claim. Pass
+`options.interpretedType` if you need a specific value. `ReferencedFrameOfReferenceUID`
+defaults to the SEG's frame of reference.

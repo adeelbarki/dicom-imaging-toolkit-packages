@@ -773,7 +773,9 @@ design-time concern.
 - [x] `rtstructToSeg(rt, roi, opts)` (PR 1) — RTSTRUCT ROI → `BINARY` SEG, voxel-for-voxel
       identical to the loaded ROI mask; `{ bytes, provenance }` return shape;
       `ConversionProvenance` + `LossyStep` types
-- [ ] `segToRtstruct` BINARY (PR 2) — `mask-vectorization` lossy step
+- [x] `segToRtstruct` BINARY (PR 2) — async; `mask-vectorization` lossy step carries the
+      *measured* round trip (voxelsBefore/After, disagreement, Dice) by re-rasterizing what
+      it wrote; FRACTIONAL SEG throws `MissingThresholdError`
 - [ ] `segToRtstruct` FRACTIONAL (PR 3) — `opts.threshold` required, `fractional-threshold`
       step records the cut
 - [ ] Both directions' lossiness documented (`docs/CONVERSION.md`) and validated against

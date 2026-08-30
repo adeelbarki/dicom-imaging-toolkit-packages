@@ -14,4 +14,6 @@ export * from "./errors.js";
 export * from "./provenance.js";
 export { rtstructToSeg } from "./rtstruct-to-seg.js";
 export type { RtstructToSegOptions } from "./rtstruct-to-seg.js";
+export { segToRtstruct } from "./seg-to-rtstruct.js";
+export type { SegToRtstructOptions } from "./seg-to-rtstruct.js";
 export { VERSION } from "./version.js";
