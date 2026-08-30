@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.1.1] - 2026-08-30
+
+No code change. Peer ranges catch up to the domain packages released alongside this repo's
+`rt-geometry-js` 1.0.0 promotion:
+
+- `rtstruct-js` peer + devDep `^0.3.2` → `^0.4.0` (SOP-reference slice association)
+- `dicom-seg-js` peer + devDep `^0.1.1` → `^0.2.0` (LABELMAP + sparse write)
+
+`rt-geometry-js` stays `^1.0.0`. The conversion API is byte-for-byte identical to 0.1.0.
+
 ## [0.1.0] - 2026-08-30
 
 First release. Convert between DICOM RT Structure Sets and DICOM Segmentation, with every
