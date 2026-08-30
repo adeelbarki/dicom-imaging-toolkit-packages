@@ -17,6 +17,12 @@
   "workspaces": [
     "packages/*"
   ],
+  "comments": {
+    "overrides": "adm-zip <0.6.0 (GHSA-xcpc-8h2w-3j85) reaches the tree only transitively via dcmjs, which pins adm-zip@0.5.17. The domain packages never touch dcmjs's zip features (port.ts uses DicomDict/DicomMessage/DicomMetaDictionary only); pinning the patched line removes the advisory outright."
+  },
+  "overrides": {
+    "adm-zip": "0.6.0"
+  },
   "engines": {
     "node": ">=20"
   },
