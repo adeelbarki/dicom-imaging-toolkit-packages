@@ -1781,3 +1781,37 @@ CHANGELOG.
 
 Note: `rtstruct-js` 0.3.1 still not on npm (npm has 0.3.0) — must be
 published before `rt-convert-js` 0.1.0 (PR 4), per dep-first discipline.
+
+## Phase G PR 3 — segToRtstruct FRACTIONAL (threshold) (2026-08-30)
+
+Branch `feat/rt-convert-fractional-threshold`.
+
+`segToRtstruct` now handles `FRACTIONAL` SEG. `SegToRtstructOptions`
+gained `threshold` + `thresholdScale`. Branch on `seg.type`:
+
+- BINARY — unchanged; a stray `threshold` is ignored + noted.
+- FRACTIONAL — `threshold` required (`MissingThresholdError`); range
+  `(0, upper]` where upper is `1` for `"unit"` (default,
+  `seg.field(n)` — rescaled `[0,1]`) or `maximumFractionalValue` for
+  `"raw"` (`seg.rawField(n)`); out of range → `RangeError` (a bad
+  argument, not a `ConversionError`). `thresholdToMask` iterates slice
+  buffers, `value >= threshold` → `maskFromDense`. `voxelsBefore` for the
+  step = `seg.support(n).count()` (non-zero support), `voxelsAfter` = cut
+  mask count. Notes: fractionalType undefined; threshold kept nothing.
+
+Result carries **two** ordered lossy steps for FRACTIONAL:
+`fractional-threshold` then `mask-vectorization` (the measured step from
+PR 2, now run on the cut mask). `provenance.voxelCount` = written mask
+count. `source` string gains `(FRACTIONAL/OCCUPANCY)` etc.
+
+Couldn't test the fractionalType-undefined path from here —
+`encodeSegFrames` (the only way to write a FRACTIONAL SEG without a
+declared type) stays internal to `dicom-seg-js`, and its `exports` map
+blocks the subpath. Code path is trivial; PR 4's real ISPY1 file
+declares OCCUPANCY so it won't cover it either. Left untested.
+
+5 new tests CONV-SR-09..13 (CONV-SR-06 reworded). 13 seg-to-rtstruct
+tests, 21 in the package. Full gate green: **237 tests** across 5
+packages. `docs/CONVERSION.md` §1 rewritten, README + CHANGELOG updated.
+
+Still: `rtstruct-js` 0.3.1 not on npm — publish before `rt-convert-js`.

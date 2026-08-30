@@ -6,10 +6,10 @@ Convert between DICOM **RT Structure Sets** and DICOM **Segmentation**, built on
 [`dicom-seg-js`](https://www.npmjs.com/package/dicom-seg-js). Part of the
 [DICOM imaging toolkit](https://github.com/adeelbarki/dicom-imaging-toolkit-packages).
 
-**Status:** in development — `0.1.0` not yet published. `rtstructToSeg` (RTSTRUCT ROI →
-`BINARY` SEG) and `segToRtstruct` for **BINARY** SEG segments are implemented.
-`segToRtstruct` on a `FRACTIONAL` SEG (threshold required) and the real-file validation
-land in the following PRs.
+**Status:** in development — `0.1.0` not yet published. Both directions are implemented:
+`rtstructToSeg` (RTSTRUCT ROI → `BINARY` SEG) and `segToRtstruct` (`BINARY` SEG straight
+through, `FRACTIONAL` SEG cut at a required `threshold`). Real-file validation lands in the
+final PR.
 
 The two directions are not symmetric, and neither is lossless in general:
 
@@ -59,9 +59,17 @@ provenance.lossySteps[0];
 // — segToRtstruct re-rasterizes what it wrote and reports the fidelity of *this* structure
 ```
 
-A `FRACTIONAL` SEG throws `MissingThresholdError` — RTSTRUCT has no per-voxel value, so
-cut the field to a mask at a chosen threshold first. (A `threshold` option lands in the
-next PR.)
+For a `FRACTIONAL` SEG, pass `threshold` (a voxel is kept when its value is `>=` it);
+`MissingThresholdError` if you don't. `thresholdScale` is `"unit"` (default, against the
+`[0,1]` field) or `"raw"` (against the stored integers). The result then carries **two**
+lossy steps — `fractional-threshold` then `mask-vectorization`:
+
+```ts
+const { provenance } = await segToRtstruct(seg, 1, { threshold: 0.5 });
+provenance.lossySteps[0];
+// { kind: "fractional-threshold", threshold: 0.5, thresholdScale: "unit",
+//   fractionalType: "PROBABILITY", maximumFractionalValue: 255, voxelsBefore, voxelsAfter, detail }
+```
 
 `rt-convert-js` does **not** re-export `rtstruct-js` or `dicom-seg-js` (they each
 re-export all of `rt-geometry-js`, so re-exporting both would collide). Import `RTStruct`,

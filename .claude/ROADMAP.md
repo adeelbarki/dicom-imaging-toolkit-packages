@@ -776,8 +776,10 @@ design-time concern.
 - [x] `segToRtstruct` BINARY (PR 2) — async; `mask-vectorization` lossy step carries the
       *measured* round trip (voxelsBefore/After, disagreement, Dice) by re-rasterizing what
       it wrote; FRACTIONAL SEG throws `MissingThresholdError`
-- [ ] `segToRtstruct` FRACTIONAL (PR 3) — `opts.threshold` required, `fractional-threshold`
-      step records the cut
+- [x] `segToRtstruct` FRACTIONAL (PR 3) — `opts.threshold` required
+      (`MissingThresholdError`), `opts.thresholdScale` `"unit"`/`"raw"`, out-of-range
+      `RangeError`; `fractional-threshold` step records threshold/scale/declared
+      type/max/voxels before+after, then `mask-vectorization` runs on the cut mask
 - [ ] Both directions' lossiness documented (`docs/CONVERSION.md`) and validated against
       real TCIA SEG + RTSTRUCT (PR 4)
 - [ ] Published to npm — `rtstruct-js` 0.3.1 first (PR 1 dep), then `rt-convert-js` 0.1.0 (PR 4)

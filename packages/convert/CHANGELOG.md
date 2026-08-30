@@ -13,15 +13,20 @@ lossy step recorded in provenance.
   step (`provenance.lossySteps` is empty) — the contours were rasterized to voxels by
   `RTStruct.load`, before the conversion. Options carry `SegmentNumber` / `SegmentLabel` /
   coded `category` / `propertyType` / `FrameOfReferenceUID` / `ContentLabel`.
-- `segToRtstruct(seg, segmentNumber, options?)` — one **BINARY** SEG segment → single-ROI
-  RTSTRUCT on the SEG's own grid. Async. The mask is traced to contours (`rtstruct-js`'s
-  vectorizer); the returned `provenance.lossySteps` carries one `mask-vectorization` step
-  with the **measured** round trip for that structure — `voxelsBefore`, `voxelsAfter`,
-  `voxelDisagreement`, `dice` (`segToRtstruct` re-rasterizes what it wrote and compares).
-  A `FRACTIONAL` SEG throws `MissingThresholdError` (RTSTRUCT has no per-voxel value; the
-  `threshold` option arrives in the next release). Options carry `roiName` /
-  `interpretedType` / `referencedFrameOfReferenceUID`; the SEG's coded category/type is
-  not auto-translated to `RTROIInterpretedType`.
+- `segToRtstruct(seg, segmentNumber, options?)` — one SEG segment → single-ROI RTSTRUCT
+  on the SEG's own grid. Async. Returns `{ bytes, provenance }`.
+  - **BINARY** — the mask is traced straight to contours.
+  - **FRACTIONAL** — the field is first cut to a mask at `options.threshold` (a voxel is
+    kept when its value is `>=` it). Required — `MissingThresholdError` if absent.
+    `options.thresholdScale` is `"unit"` (default, against the `[0,1]` field) or `"raw"`
+    (against the stored integers); out of range → `RangeError`.
+  - `provenance.lossySteps` lists each step, in order: `fractional-threshold` (FRACTIONAL
+    only — records threshold, scale, declared type, max, voxels before/after) then
+    `mask-vectorization` (always — the **measured** round trip: `voxelsBefore`,
+    `voxelsAfter`, `voxelDisagreement`, `dice`, from re-rasterizing what was written).
+  - Options: `roiName` (default `SegmentLabel`, else `"Segment <n>"`), `interpretedType`
+    (the SEG's coded category/type is not auto-translated), `referencedFrameOfReferenceUID`
+    (default the SEG's frame of reference), `threshold`, `thresholdScale`.
 - `ConversionResult` = `{ bytes, provenance }`. `ConversionProvenance` records the
   direction, the shared grid, the written voxel count, `lossySteps`, and free-text `notes`
   (including diagnostics carried across from the source object).

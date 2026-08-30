@@ -7,13 +7,49 @@ import {
   SegmentNotFoundError,
   segToRtstruct,
 } from "../../src/index.js";
-import type { ConversionProvenance, MaskVectorizationStep } from "../../src/index.js";
+import type {
+  ConversionProvenance,
+  FractionalThresholdStep,
+  MaskVectorizationStep,
+} from "../../src/index.js";
 
 /** Narrow the union — every `segToRtstruct` result carries exactly one. */
 function vectorStep(p: ConversionProvenance): MaskVectorizationStep {
   const s = p.lossySteps.find((x) => x.kind === "mask-vectorization");
   if (!s || s.kind !== "mask-vectorization") throw new Error("expected a mask-vectorization step");
   return s;
+}
+
+function thresholdStep(p: ConversionProvenance): FractionalThresholdStep {
+  const s = p.lossySteps.find((x) => x.kind === "fractional-threshold");
+  if (!s || s.kind !== "fractional-threshold") throw new Error("expected a fractional-threshold step");
+  return s;
+}
+
+function fractionalSeg(
+  fn: (c: number, r: number, k: number) => number,
+  opts: { fractionalType?: "PROBABILITY" | "OCCUPANCY"; maximumFractionalValue?: number; fieldScale?: "unit" | "raw"; label?: string } = {},
+) {
+  const g = grid();
+  const field = createScalarField(g, fn);
+  return readSeg(
+    writeSeg({
+      segmentationType: "FRACTIONAL",
+      fractionalType: opts.fractionalType ?? "PROBABILITY",
+      ...(opts.maximumFractionalValue !== undefined ? { maximumFractionalValue: opts.maximumFractionalValue } : {}),
+      ...(opts.fieldScale !== undefined ? { fieldScale: opts.fieldScale } : {}),
+      segments: [{ number: 1, label: opts.label ?? "tumour", field }],
+    }),
+  );
+}
+
+/** A soft blob: confidence ramps from ~0.9 at the centre to 0 at the edge of a box. */
+function blob(c: number, r: number, k: number): number {
+  const dc = Math.abs(c - 12) / 8;
+  const dr = Math.abs(r - 12) / 8;
+  const dk = Math.abs(k - 6) / 4;
+  const d = Math.max(dc, dr, dk);
+  return d >= 1 ? 0 : 0.9 * (1 - d);
 }
 
 // A valid DICOM UID (numeric components only) — dcmjs silently mangles non-numeric ones.
@@ -110,18 +146,61 @@ describe("segToRtstruct", () => {
     ).toEqual(["Segment 2"]);
   });
 
-  it("CONV-SR-06 a FRACTIONAL SEG throws MissingThresholdError", async () => {
-    const g = grid();
-    const field = createScalarField(g, (c, r, k) => (c > 6 && c < 16 && r > 6 && r < 16 && k > 2 && k < 9 ? 0.8 : 0));
-    const seg = readSeg(
-      writeSeg({
-        segmentationType: "FRACTIONAL",
-        fractionalType: "PROBABILITY",
-        segments: [{ number: 1, label: "tumour", field }],
-      }),
-    );
+  it("CONV-SR-06 a FRACTIONAL SEG with no threshold throws MissingThresholdError", async () => {
+    const seg = fractionalSeg(blob);
     expect(seg.type).toBe("FRACTIONAL");
     await expect(segToRtstruct(seg, 1)).rejects.toThrow(MissingThresholdError);
+  });
+
+  it("CONV-SR-09 FRACTIONAL + unit threshold: two lossy steps, fractional-threshold recorded", async () => {
+    const seg = fractionalSeg(blob, { fractionalType: "OCCUPANCY" });
+    const { bytes, provenance } = await segToRtstruct(seg, 1, { threshold: 0.5 });
+
+    expect(provenance.lossySteps.map((s) => s.kind)).toEqual(["fractional-threshold", "mask-vectorization"]);
+    const ft = thresholdStep(provenance);
+    expect(ft).toMatchObject({ threshold: 0.5, thresholdScale: "unit", fractionalType: "OCCUPANCY", maximumFractionalValue: 255 });
+    expect(ft.voxelsBefore).toBe(seg.support(1).count());
+    expect(ft.voxelsAfter).toBeGreaterThan(0);
+    expect(ft.voxelsAfter).toBeLessThan(ft.voxelsBefore); // a soft blob loses its low-confidence rim
+    expect(provenance.source).toContain("FRACTIONAL/OCCUPANCY");
+    expect(provenance.voxelCount).toBe(ft.voxelsAfter);
+
+    // the written RTSTRUCT re-rasterizes to the thresholded mask
+    const rt = await RTStruct.load({ rtstruct: bytes, geometry: seg.geometry });
+    expect(rt.getMask("tumour").count()).toBe(vectorStep(provenance).voxelsAfter);
+  });
+
+  it("CONV-SR-10 a higher threshold keeps strictly fewer voxels", async () => {
+    const seg = fractionalSeg(blob);
+    const low = thresholdStep((await segToRtstruct(seg, 1, { threshold: 0.3 })).provenance);
+    const high = thresholdStep((await segToRtstruct(seg, 1, { threshold: 0.7 })).provenance);
+    expect(high.voxelsAfter).toBeLessThan(low.voxelsAfter);
+    expect(low.voxelsAfter).toBeLessThanOrEqual(seg.support(1).count());
+  });
+
+  it("CONV-SR-11 raw scale thresholds against the stored integers", async () => {
+    // stored value = round(unit * 255); blob peaks at 0.9 -> ~229
+    const seg = fractionalSeg(blob);
+    const { provenance } = await segToRtstruct(seg, 1, { threshold: 200, thresholdScale: "raw" });
+    const ft = thresholdStep(provenance);
+    expect(ft).toMatchObject({ threshold: 200, thresholdScale: "raw", maximumFractionalValue: 255 });
+    expect(ft.voxelsAfter).toBeGreaterThan(0);
+    expect(ft.detail).toContain("raw");
+  });
+
+  it("CONV-SR-12 an out-of-range threshold throws RangeError", async () => {
+    const seg = fractionalSeg(blob);
+    await expect(segToRtstruct(seg, 1, { threshold: 1.5 })).rejects.toThrow(RangeError);
+    await expect(segToRtstruct(seg, 1, { threshold: 0 })).rejects.toThrow(RangeError);
+    await expect(segToRtstruct(seg, 1, { threshold: 300, thresholdScale: "raw" })).rejects.toThrow(RangeError);
+  });
+
+  it("CONV-SR-13 a threshold passed for a BINARY SEG is ignored, with a note", async () => {
+    const g = grid();
+    const seg = binarySeg(cubePhantom(g, 20));
+    const { provenance } = await segToRtstruct(seg, 1, { threshold: 0.5 });
+    expect(provenance.lossySteps.map((s) => s.kind)).toEqual(["mask-vectorization"]);
+    expect(provenance.notes.join(" ")).toContain("ignored");
   });
 
   it("CONV-SR-07 an unknown segment number throws SegmentNotFoundError", async () => {
@@ -137,7 +216,7 @@ describe("segToRtstruct", () => {
 
     const { bytes, provenance } = await segToRtstruct(seg, 1);
     expect(provenance.voxelCount).toBe(0);
-    expect(provenance.notes.join(" ")).toContain("is empty");
+    expect(provenance.notes.join(" ")).toContain("produced no voxels");
 
     expect(vectorStep(provenance)).toMatchObject({ voxelsBefore: 0, voxelsAfter: 0, voxelDisagreement: 0 });
 
