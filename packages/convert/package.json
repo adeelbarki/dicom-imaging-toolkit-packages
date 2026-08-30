@@ -51,15 +51,15 @@
     "prepublishOnly": "npm run build && npm test"
   },
   "peerDependencies": {
-    "dicom-seg-js": "^0.1.0",
-    "rt-geometry-js": "^0.1.2",
-    "rtstruct-js": "^0.3.1"
+    "dicom-seg-js": "^0.1.1",
+    "rt-geometry-js": "^1.0.0",
+    "rtstruct-js": "^0.3.2"
   },
   "devDependencies": {
     "@types/node": "^26.2.0",
-    "dicom-seg-js": "^0.1.0",
-    "rt-geometry-js": "^0.1.2",
-    "rtstruct-js": "^0.3.1",
+    "dicom-seg-js": "^0.1.1",
+    "rt-geometry-js": "^1.0.0",
+    "rtstruct-js": "^0.3.2",
     "typescript": "^5.6.3",
     "vitest": "^2.1.4"
   }

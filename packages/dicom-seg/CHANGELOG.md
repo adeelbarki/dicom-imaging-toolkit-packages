@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.1] - 2026-08-30
+
+No API change. Peer dependency `rt-geometry-js` bumped `^0.1.2` → `^1.0.0` — the shared
+core was promoted to a stable major (identical code to its 0.1.2, see
+`rt-geometry-js/CONTRACT.md`).
+
 ## [0.1.0] - 2026-08-29
 
 First release. DICOM Segmentation (SEG) **read and write** — `BINARY` masks and

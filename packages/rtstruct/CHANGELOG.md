@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.3.2] - 2026-08-30
+
+No API change. Peer dependency `rt-geometry-js` bumped `^0.1.0` → `^1.0.0` — the shared
+core was promoted to a stable major (identical code to its 0.1.2, see
+`rt-geometry-js/CONTRACT.md`). Install `rtstruct-js rt-geometry-js` as before.
+
 ## [0.3.1] - 2026-08-29
 
 Additive, non-breaking. Enables lossless-metadata conversion in `rt-convert-js`.
