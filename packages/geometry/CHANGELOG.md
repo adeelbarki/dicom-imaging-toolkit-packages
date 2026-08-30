@@ -1,5 +1,31 @@
 # Changelog
 
+## [1.0.0] - 2026-08-30
+
+**No code change from 0.1.2.** This release only promotes the shared core to a
+stable major so the toolkit has a real SemVer boundary to version against.
+
+Background: the 0.x peer-dependency arrangement worked only as long as every
+change stayed additive — the moment the core made a breaking change and one
+domain package moved while another hadn't, npm could install two copies and the
+"geometry objects the packages hand each other are identical" guarantee would
+break silently. 0.1.1 and 0.1.2 were both additive across three consumers with
+no breakage, and `rt-convert-js` (the package that stresses cross-domain
+geometry identity hardest — SEG↔RTSTRUCT round trips) exercises the current
+surface with 13 passing tests and needs nothing the API doesn't already expose.
+So the surface is cut as-is.
+
+### What this means
+
+- New `CONTRACT.md` states exactly what the stability guarantee covers
+  (`GridGeometry`'s public surface; `Mask3D` / `ScalarField3D` as interfaces;
+  the constructors, sampling/resampling/histogram entry points, metrics,
+  phantoms, and error classes) and what it does not — notably that the internal
+  dense-buffer storage of `Mask3D` / `ScalarField3D` is **not** part of the
+  contract and may change (e.g. bit-packing) in a minor.
+- SemVer from here: additive → minor, breaking → major. Domain packages peer on
+  `^1.0.0`.
+
 ## [0.1.2] - 2026-08-28
 
 Additive — no breaking change, `^0.1.0` covers it.

@@ -1,6 +1,6 @@
 {
   "name": "rtstruct-js",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "type": "module",
   "description": "DICOM RT Structure Set reading and writing, validated against analytic phantoms.",
   "keywords": [
@@ -50,11 +50,11 @@
     "prepublishOnly": "npm run build && npm test"
   },
   "peerDependencies": {
-    "rt-geometry-js": "^0.1.0"
+    "rt-geometry-js": "^1.0.0"
   },
   "devDependencies": {
     "@types/node": "^26.2.0",
-    "rt-geometry-js": "^0.1.0",
+    "rt-geometry-js": "^1.0.0",
     "typescript": "^5.6.3",
     "vitest": "^2.1.4"
   },

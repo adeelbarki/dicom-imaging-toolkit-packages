@@ -1,6 +1,6 @@
 {
   "name": "dicom-seg-js",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "description": "DICOM Segmentation (SEG) reading and writing — BINARY masks and FRACTIONAL probability/occupancy fields — built on rt-geometry-js.",
   "keywords": [
@@ -51,11 +51,11 @@
     "prepublishOnly": "npm run build && npm test"
   },
   "peerDependencies": {
-    "rt-geometry-js": "^0.1.2"
+    "rt-geometry-js": "^1.0.0"
   },
   "devDependencies": {
     "@types/node": "^26.2.0",
-    "rt-geometry-js": "^0.1.2",
+    "rt-geometry-js": "^1.0.0",
     "typescript": "^5.6.3",
     "vitest": "^2.1.4"
   },
