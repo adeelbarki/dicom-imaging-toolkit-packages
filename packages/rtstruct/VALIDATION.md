@@ -224,7 +224,7 @@ contours that partially overlap without either containing the other (neither nes
 disjoint) — even-odd fill would carve out the symmetric-difference region, which is
 almost certainly not the intended ROI. This is a real, if uncommon, possibility in
 edited/hand-corrected real-world contour sets. Not observed in the files examined here.
-Not yet fixed; not yet diagnosed. Logged in `.claude/ROADMAP.md`.
+Not yet fixed; not yet diagnosed. Tracked in the internal roadmap.
 
 ## What this does not prove
 
