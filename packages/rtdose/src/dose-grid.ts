@@ -1,8 +1,10 @@
 import {
+  add,
   createScalarField,
   histogram,
   resampleField,
   sampleFieldAt,
+  scale,
   valueAtVolumeFraction,
   volumeAboveThreshold,
   type Diagnostic,
