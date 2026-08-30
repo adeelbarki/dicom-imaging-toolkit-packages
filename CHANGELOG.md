@@ -15,16 +15,25 @@ changelog:
 | `rt-geometry-js` | 1.1.0 | published |
 | `rtstruct-js` | 0.4.0 | publish pending |
 | `rtdose-js` | 0.1.1 | published |
-| `dicom-seg-js` | 0.1.1 | published |
+| `dicom-seg-js` | 0.2.0 | publish pending |
 | `rt-convert-js` | 0.1.0 | published |
+
+## 2026-08-30 — SEG LABELMAP + sparse write
+
+- **`dicom-seg-js` → 0.2.0** (additive): `LABELMAP` (PS3.3 Sup 243) read and
+  write — one label per pixel, `seg.mask(n)` returns the voxels whose label is
+  `n`; overlapping input to a LABELMAP write throws `LabelmapOverlapError`.
+  `writeSeg({ frameCoverage: "sparse" })` omits all-background frames.
+  `Segmentation.numberOfFrames` added. `UnsupportedSegmentationTypeError` now
+  only for an unknown type. Peer stays `rt-geometry-js ^1.0.0`.
 
 ## 2026-08-30 — `rt-convert-js` 0.1.0 published
 
 - **`rt-convert-js` 0.1.0 is on npm** — RTSTRUCT ↔ SEG conversion, both directions,
-  every lossy step measured and recorded in provenance. Peers on `rt-geometry-js`
-  `^1.0.0`, `rtstruct-js` `^0.3.2`, `dicom-seg-js` `^0.1.1` (all live). Round-trip
-  validated on real TCIA data — see [`packages/convert/VALIDATION.md`](packages/convert/VALIDATION.md).
-  Completes Phase G. All five packages are now published with a resolving peer chain.
+  every lossy step measured and recorded in provenance. Round-trip validated on real
+  TCIA data — see [`packages/convert/VALIDATION.md`](packages/convert/VALIDATION.md).
+  Completes Phase G. (Its peer ranges catch up to `rtstruct-js` 0.4 / `dicom-seg-js` 0.2
+  in a follow-up `rt-convert-js` 0.1.1.)
 
 ## 2026-08-30 — RTSTRUCT SOP-reference slice association
 
