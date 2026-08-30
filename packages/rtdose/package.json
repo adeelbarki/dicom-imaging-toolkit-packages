@@ -48,7 +48,8 @@
     "check:deps": "node ../../scripts/check-dependency-rule.mjs",
     "build": "tsc -p tsconfig.build.json",
     "prebuild": "npm run build --workspace rt-geometry-js",
-    "prepublishOnly": "npm run build && npm test"
+    "prepublishOnly": "npm run build && npm test",
+    "bench": "vitest bench --run"
   },
   "peerDependencies": {
     "rt-geometry-js": "^1.0.0"

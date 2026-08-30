@@ -75,6 +75,25 @@ particular is not for making or checking treatment decisions — see its README.
 
 **Standard pinned (for doc references):** DICOM PS3.3 **2026c**.
 
+## Performance
+
+Each package has a `bench/` suite (`npm run bench`). Measured numbers and how
+they scale to a 512 × 512 × 200 volume — including the memory footprint of a
+dense mask vs. a scalar field, and which operations are Web Worker candidates —
+are in [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md).
+
+## Runtime support
+
+Every package targets **ES2022** and ships ESM only; use a bundler for the
+browser. `rt-geometry-js` has no dependencies and runs anywhere. The domain
+packages depend on `dcmjs`, which is browser-compatible (Cornerstone ships it);
+its one Node-only path (`adm-zip`) is never reached and is `overrides`-pinned to
+a patched release, so `npm audit` is clean. The libraries are Web Worker-*safe*
+(no worker orchestration is built in — that is the app's concern). CI runs the
+`rt-geometry-js` suite in headless Chromium and bundle-smoke-tests every package
+for `platform: browser`; `engines.node: >=20` reflects the dev/CLI toolchain,
+not a runtime ceiling.
+
 ## Repository layout
 
 ```
