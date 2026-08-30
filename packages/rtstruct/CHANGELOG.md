@@ -1,5 +1,39 @@
 # Changelog
 
+## [0.4.0] - 2026-08-30
+
+Authoritative contour → slice association. Additive and backward-compatible —
+`RTStruct.load({ geometry })` still accepts a bare `GridGeometry` and behaves
+exactly as before; passing a `SeriesGeometry` unlocks the new path.
+
+### Added
+
+- **`ContourImageSequence` is now read.** Each `Contour` carries
+  `referencedSOPInstanceUIDs` (the contour's `ReferencedSOPInstanceUID`s, if
+  present), and `writeRTStruct` / `RTStruct.createFromMask` write a
+  `ContourImageSequence` when a contour supplies them.
+- **`RTStruct.load({ geometry })` accepts a `GridGeometry` *or* a
+  `SeriesGeometry`.** With a `SeriesGeometry`, a contour whose
+  `ContourImageSequence` names one of the series' slices is placed on **that
+  slice** (the association DICOM intends); nearest-plane geometry is used only
+  where a reference is missing or doesn't resolve.
+- **`RoiHandle` gains `sliceAssociation` and `sliceAssociationDetail`**
+  (`{ totalContours, sopReferenced, geometricFallback, unresolvedSopReferences }`).
+  `provenance.sliceAssociation` is `"sop-reference"` only when *every* contour
+  resolved via its SOP reference; any fallback makes it `"geometric-fallback"`
+  and the detail gives the split.
+- New diagnostics: `SOP_REFERENCE_UNRESOLVED` (a referenced UID wasn't among the
+  supplied slices), `SOP_REFERENCE_PLANE_MISMATCH` (the SOP reference and the
+  contour geometry point to different planes — the reference wins),
+  `MISSING_CONTOUR_IMAGE_SEQUENCE` (a series was supplied but no contour carries
+  a reference).
+
+### Changed
+
+- `rasterize(contours, grid)` takes an optional third argument
+  `{ sopInstanceUIDToPlaneIndex }` and its result carries
+  `sliceAssociationDetail`. Calling it with two arguments is unchanged.
+
 ## [0.3.2] - 2026-08-30
 
 No API change. Peer dependency `rt-geometry-js` bumped `^0.1.0` → `^1.0.0` — the shared

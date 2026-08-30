@@ -14,11 +14,11 @@ Round-trip volume fidelity is verified separately, against a torus phantom's
 closed-form volume.
 
 **Status:** published — [`rtstruct-js`](https://www.npmjs.com/package/rtstruct-js)
-on npm, v0.3.2. Requires the peer dependency
+on npm, v0.4.0. Requires the peer dependency
 [`rt-geometry-js`](https://www.npmjs.com/package/rt-geometry-js) (`^1.0.0`);
-`npm install rtstruct-js rt-geometry-js`. 0.3.2 only bumps that peer range to the
-stabilised core (no API change); 0.3.1 added `interpretedType` /
-`referencedFrameOfReferenceUID` to `createFromMask` (for `rt-convert-js`).
+`npm install rtstruct-js rt-geometry-js`. 0.4.0 adds authoritative
+`ContourImageSequence` SOP-reference slice association (pass a `SeriesGeometry`
+to `RTStruct.load`); 0.3.2 bumped the peer range to the stabilised core.
 
 **Validated against real DICOM files**, not just phantoms — 5 vendors/tools, real
 keyhole/nested contour distributions, real round-trip fidelity. See
@@ -37,15 +37,18 @@ What this library does *not* do yet — read this before adopting:
   files (see below) — there is no automatic "find the referenced series" path.
 - `mask.volume({ method: "contour" })` is not implemented — voxel counting
   (`method: "voxel"`, the default) is the only supported method.
-- No boolean mask operations (union/intersection/subtraction), no margin
-  expansion, no single-mask centroid or bounding-box utility.
-  `centroidDisplacementMm` compares *two* masks; it isn't a general centroid.
+- Boolean mask operations, mm-radius `dilate`/`erode`, single-mask `centroid` /
+  `boundingBox`, `crop`/`pad`, and connected components now live in
+  `rt-geometry-js` (≥ 1.1.0) and are re-exported here.
 - Grid planes must be mutually parallel — `NonParallelPlanesError` otherwise.
   Gantry-tilted or otherwise non-parallel series aren't representable.
-- Contour-to-slice association is always geometric (nearest-plane matching).
-  `ContourImageSequence`'s SOP-instance references aren't read, so
-  `Provenance.sliceAssociation` is always `"geometric-fallback"`, never
-  `"sop-reference"`, even when the file declares an authoritative reference.
+- Contour-to-slice association: pass a **`GridGeometry`** and every contour is
+  placed by nearest-plane geometry (`sliceAssociation: "geometric-fallback"`).
+  Pass a **`SeriesGeometry`** (`readSeriesGeometry(...).geometry`) and a contour
+  whose `ContourImageSequence` names one of the series' slices is placed on that
+  slice — the authoritative association (`"sop-reference"`); geometry is used
+  only where a reference is absent or unresolvable.
+  `roi(...).sliceAssociationDetail` reports the per-ROI split.
 
 ## Install
 
