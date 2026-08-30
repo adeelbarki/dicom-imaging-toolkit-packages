@@ -31,8 +31,9 @@ export class MalformedSegmentationError extends Error {
 }
 
 /**
- * `SegmentationType` (0062,0001) is `LABELMAP`. dicom-seg-js 0.1.0 reads `BINARY` and
- * `FRACTIONAL` only; LABELMAP (PS3.3 Supplement 243) support is planned for 0.2.0.
+ * `SegmentationType` (0062,0001) is a value dicom-seg-js does not handle. As of 0.2.0
+ * `BINARY`, `FRACTIONAL`, and `LABELMAP` (PS3.3 Supplement 243) are all supported, so this
+ * is now raised only for an unknown/vendor value.
  */
 export class UnsupportedSegmentationTypeError extends Error {
   constructor(message: string) {
@@ -42,9 +43,22 @@ export class UnsupportedSegmentationTypeError extends Error {
 }
 
 /**
- * `mask()` was called on a FRACTIONAL segmentation, or `field()` on a BINARY one. The two
- * are not interchangeable and there is no safe default threshold to turn a probability
- * field into a mask (roadmap §7.1) — the caller must pick one explicitly.
+ * A `writeSeg({ segmentationType: "LABELMAP" })` call was given segments whose masks
+ * overlap. LABELMAP is a partition — each pixel stores exactly one `SegmentNumber` — so
+ * overlapping input cannot be represented. Use `BINARY` (with `SegmentsOverlap`) instead.
+ */
+export class LabelmapOverlapError extends Error {
+  constructor(message: string) {
+    super(`LabelmapOverlapError: ${message}`);
+    this.name = "LabelmapOverlapError";
+  }
+}
+
+/**
+ * `mask()` was called on a FRACTIONAL segmentation, `field()` on a BINARY or LABELMAP one,
+ * or `field()` on LABELMAP. The forms are not interchangeable and there is no safe default
+ * threshold to turn a probability field into a mask (roadmap §7.1) — the caller must pick
+ * one explicitly.
  */
 export class SegmentationTypeMismatchError extends Error {
   constructor(message: string) {

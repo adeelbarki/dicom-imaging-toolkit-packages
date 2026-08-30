@@ -16,6 +16,7 @@ import {
   type Vec3,
 } from "rt-geometry-js";
 import {
+  LabelmapOverlapError,
   MalformedSegmentationError,
   NotSegmentationError,
   UnsupportedSegmentationTypeError,
@@ -88,11 +89,14 @@ export interface ParsedSeg {
   readonly numberOfFrames: number;
   readonly segments: readonly SegmentInfo[];
   readonly frames: readonly FrameRef[];
-  /** Raw PixelData bytes (bit-packed for BINARY, one byte per pixel for FRACTIONAL). */
+  /** Raw PixelData bytes (bit-packed for BINARY, one byte per pixel for FRACTIONAL,
+   *  8- or 16-bit integers per pixel for LABELMAP). */
   readonly pixelData: Uint8Array;
   /** True when BINARY frames are individually padded to a byte boundary rather than
    *  packed as one continuous bitstream (a non-conformant but real variant). */
   readonly binaryFramesByteAligned: boolean;
+  /** LABELMAP only — bits per label pixel (8 or 16). */
+  readonly labelmapBitsAllocated: 8 | 16 | undefined;
   readonly diagnostics: readonly Diagnostic[];
 }
 
@@ -111,15 +115,16 @@ export function readSegDataset(bytes: ArrayBuffer): ParsedSeg {
   }
 
   const rawType = ((ds["SegmentationType"] as string | undefined) ?? "").toUpperCase();
-  if (rawType === "LABELMAP") {
+  if (rawType !== "BINARY" && rawType !== "FRACTIONAL" && rawType !== "LABELMAP") {
+    if (rawType === "") {
+      throw new MalformedSegmentationError("SegmentationType (0062,0001) is absent, expected BINARY, FRACTIONAL, or LABELMAP");
+    }
     throw new UnsupportedSegmentationTypeError(
-      "LABELMAP segmentation (PS3.3 Sup 243) is not supported in dicom-seg-js 0.1.0 — planned for 0.2.0",
+      `SegmentationType is ${JSON.stringify(rawType)} — dicom-seg-js handles BINARY, FRACTIONAL, and LABELMAP`,
     );
   }
-  if (rawType !== "BINARY" && rawType !== "FRACTIONAL") {
-    throw new MalformedSegmentationError(`SegmentationType is ${JSON.stringify(rawType || "absent")}, expected BINARY or FRACTIONAL`);
-  }
   const segmentationType = rawType as SegmentationType;
+  const isLabelmap = segmentationType === "LABELMAP";
 
   const rows = ds["Rows"] as number | undefined;
   const columns = ds["Columns"] as number | undefined;
@@ -160,9 +165,12 @@ export function readSegDataset(bytes: ArrayBuffer): ParsedSeg {
   }
   const rawFrames: RawFrame[] = perFrame.map((fg, frameIndex) => {
     const segId = asArray(fg["SegmentIdentificationSequence"])[0];
-    const segmentNumber = Number(segId?.["ReferencedSegmentNumber"]);
+    const rawSegNum = Number(segId?.["ReferencedSegmentNumber"]);
+    // LABELMAP frames carry every segment via the pixel value, so a per-frame
+    // SegmentIdentificationSequence is optional; 0 stands for "all labels".
+    const segmentNumber = isLabelmap ? (Number.isInteger(rawSegNum) && rawSegNum > 0 ? rawSegNum : 0) : rawSegNum;
     const ipp = asNumberArray(asArray(fg["PlanePositionSequence"])[0]?.["ImagePositionPatient"]);
-    if (!Number.isInteger(segmentNumber) || segmentNumber <= 0) {
+    if (!isLabelmap && (!Number.isInteger(segmentNumber) || segmentNumber <= 0)) {
       throw new MalformedSegmentationError(`frame ${frameIndex}: missing SegmentIdentificationSequence/ReferencedSegmentNumber`);
     }
     if (!ipp || ipp.length !== 3) {
@@ -200,14 +208,18 @@ export function readSegDataset(bytes: ArrayBuffer): ParsedSeg {
       propertyTypeModifier: readCode(s["SegmentedPropertyTypeModifierCodeSequence"]),
       trackingId: (s["TrackingID"] as string | undefined) || undefined,
       trackingUid: (s["TrackingUID"] as string | undefined) || undefined,
-      frameCount: framesBySegment.get(number) ?? 0,
+      // LABELMAP stores one frame per plane carrying every label, so a per-segment count
+      // isn't meaningful before the pixels are scanned — report the plane count.
+      frameCount: isLabelmap ? perFrame.length : framesBySegment.get(number) ?? 0,
     };
   });
-  for (const f of rawFrames) {
-    if (!declaredNumbers.has(f.segmentNumber)) {
-      throw new MalformedSegmentationError(
-        `frame ${f.frameIndex} references SegmentNumber ${f.segmentNumber}, which has no SegmentSequence entry`,
-      );
+  if (!isLabelmap) {
+    for (const f of rawFrames) {
+      if (!declaredNumbers.has(f.segmentNumber)) {
+        throw new MalformedSegmentationError(
+          `frame ${f.frameIndex} references SegmentNumber ${f.segmentNumber}, which has no SegmentSequence entry`,
+        );
+      }
     }
   }
 
@@ -258,7 +270,20 @@ export function readSegDataset(bytes: ArrayBuffer): ParsedSeg {
   const rc = (rows as number) * (columns as number);
 
   let binaryFramesByteAligned = false;
-  if (segmentationType === "BINARY") {
+  let labelmapBitsAllocated: 8 | 16 | undefined;
+  if (isLabelmap) {
+    const ba = Number(ds["BitsAllocated"]);
+    if (ba !== 8 && ba !== 16) {
+      throw new MalformedSegmentationError(`LABELMAP BitsAllocated is ${ds["BitsAllocated"]}, expected 8 or 16`);
+    }
+    labelmapBitsAllocated = ba;
+    const need = numberOfFrames * rc * (ba / 8);
+    if (pixelData.length < need) {
+      throw new MalformedSegmentationError(
+        `PixelData is ${pixelData.length} bytes; a LABELMAP SEG of ${numberOfFrames} frames × ${rc} px × ${ba / 8} B needs ${need}`,
+      );
+    }
+  } else if (segmentationType === "BINARY") {
     const continuousBytes = Math.ceil((numberOfFrames * rc) / 8);
     const perFrameBytes = numberOfFrames * Math.ceil(rc / 8);
     if (pixelData.length >= continuousBytes) {
@@ -352,6 +377,7 @@ export function readSegDataset(bytes: ArrayBuffer): ParsedSeg {
     frames,
     pixelData,
     binaryFramesByteAligned,
+    labelmapBitsAllocated,
     diagnostics,
   };
 }
@@ -389,6 +415,23 @@ export function fractionalFrame(parsed: ParsedSeg, frameIndex: number): Uint8Arr
   return parsed.pixelData.subarray(offset, offset + rc);
 }
 
+/** Label values for LABELMAP frame `frameIndex` (length rows·columns; each entry a
+ *  SegmentNumber, 0 = background). Handles 8- and 16-bit little-endian pixel data. */
+export function labelmapFrame(parsed: ParsedSeg, frameIndex: number): Uint8Array | Uint16Array {
+  const rc = parsed.rows * parsed.columns;
+  if (parsed.labelmapBitsAllocated === 16) {
+    const byteOffset = parsed.pixelData.byteOffset + frameIndex * rc * 2;
+    // A copy, so callers can't accidentally mutate the shared PixelData, and to sidestep
+    // any alignment constraint on the underlying buffer.
+    const out = new Uint16Array(rc);
+    const view = new DataView(parsed.pixelData.buffer, byteOffset, rc * 2);
+    for (let i = 0; i < rc; i++) out[i] = view.getUint16(i * 2, true);
+    return out;
+  }
+  const offset = frameIndex * rc;
+  return parsed.pixelData.subarray(offset, offset + rc);
+}
+
 // ---------------------------------------------------------------------------
 // Fixture builder. SEG files are BUILT for tests, never checked in (same rule
 // as rtstruct-js / rtdose-js). Not re-exported from index.ts. PR 3 promotes a
@@ -409,9 +452,12 @@ export interface EncodeSegSegment {
 }
 
 export interface WriteSegFrame {
+  /** BINARY / FRACTIONAL: the segment this frame belongs to. LABELMAP: unused (0) — one
+   *  frame per plane carries every label. */
   readonly segmentNumber: number;
   readonly position: Vec3;
-  /** BINARY: 0/1 per pixel. FRACTIONAL: 0..maximumFractionalValue per pixel. Length rows·columns. */
+  /** BINARY: 0/1 per pixel. FRACTIONAL: 0..maximumFractionalValue per pixel. LABELMAP: a
+   *  SegmentNumber (0 = background) per pixel. Length rows·columns. */
   readonly pixels: ArrayLike<number>;
 }
 
@@ -427,6 +473,8 @@ export interface EncodeSegOptions {
   readonly segmentsOverlap?: SegmentsOverlap;
   readonly fractionalType?: FractionalType;
   readonly maximumFractionalValue?: number;
+  /** LABELMAP only — bits per label pixel. Default 8. */
+  readonly labelmapBitsAllocated?: 8 | 16;
   readonly segments: readonly EncodeSegSegment[];
   readonly frames: readonly WriteSegFrame[];
   /** Override to exercise NotSegmentationError. */
@@ -447,11 +495,14 @@ export function encodeSegFrames(options: EncodeSegOptions): ArrayBuffer {
   const rowDirection = options.rowDirection ?? ([1, 0, 0] as Vec3);
   const columnDirection = options.columnDirection ?? ([0, 1, 0] as Vec3);
   const isBinary = options.segmentationType === "BINARY";
+  const isLabelmap = options.segmentationType === "LABELMAP";
+  const labelmapBits = options.labelmapBitsAllocated ?? 8;
 
   const perFrameGroups = options.frames.map((f) => ({
-    FrameContentSequence: [{ StackID: "1", InStackPositionNumber: 1, DimensionIndexValues: [f.segmentNumber, 1] }],
+    FrameContentSequence: [{ StackID: "1", InStackPositionNumber: 1, DimensionIndexValues: [f.segmentNumber || 1, 1] }],
     PlanePositionSequence: [{ ImagePositionPatient: [...f.position] }],
-    SegmentIdentificationSequence: [{ ReferencedSegmentNumber: f.segmentNumber }],
+    // LABELMAP carries the segment in the pixel value — no per-frame SegmentIdentificationSequence.
+    ...(isLabelmap ? {} : { SegmentIdentificationSequence: [{ ReferencedSegmentNumber: f.segmentNumber }] }),
   }));
 
   let pixelBuffer: ArrayBuffer;
@@ -459,6 +510,21 @@ export function encodeSegFrames(options: EncodeSegOptions): ArrayBuffer {
     const bits: number[] = [];
     for (const f of options.frames) for (let i = 0; i < rc; i++) bits.push(f.pixels[i] ? 1 : 0);
     pixelBuffer = (BitArray.pack(bits) as Uint8Array).buffer.slice(0) as ArrayBuffer;
+  } else if (isLabelmap) {
+    const n = options.frames.length * rc;
+    if (labelmapBits === 16) {
+      const words = new Uint16Array(n);
+      options.frames.forEach((f, fi) => {
+        for (let i = 0; i < rc; i++) words[fi * rc + i] = Math.max(0, Math.round(f.pixels[i] ?? 0)) & 0xffff;
+      });
+      pixelBuffer = words.buffer.slice(0) as ArrayBuffer;
+    } else {
+      const bytes = new Uint8Array(n);
+      options.frames.forEach((f, fi) => {
+        for (let i = 0; i < rc; i++) bytes[fi * rc + i] = Math.max(0, Math.min(255, Math.round(f.pixels[i] ?? 0)));
+      });
+      pixelBuffer = bytes.buffer.slice(0) as ArrayBuffer;
+    }
   } else {
     const bytes = new Uint8Array(options.frames.length * rc);
     options.frames.forEach((f, fi) => {
@@ -477,9 +543,9 @@ export function encodeSegFrames(options: EncodeSegOptions): ArrayBuffer {
     Rows: rows,
     Columns: columns,
     NumberOfFrames: options.frames.length,
-    BitsAllocated: isBinary ? 1 : 8,
-    BitsStored: isBinary ? 1 : 8,
-    HighBit: isBinary ? 0 : 7,
+    BitsAllocated: isBinary ? 1 : isLabelmap ? labelmapBits : 8,
+    BitsStored: isBinary ? 1 : isLabelmap ? labelmapBits : 8,
+    HighBit: isBinary ? 0 : isLabelmap ? labelmapBits - 1 : 7,
     PixelRepresentation: 0,
     SegmentationType: options.forceType ?? options.segmentationType,
     SegmentsOverlap: options.segmentsOverlap ?? "NO",
@@ -523,7 +589,7 @@ export function encodeSegFrames(options: EncodeSegOptions): ArrayBuffer {
     PerFrameFunctionalGroupsSequence: perFrameGroups,
   };
 
-  if (!isBinary) {
+  if (!isBinary && !isLabelmap) {
     if (!options.omitFractionalType) dataset["SegmentationFractionalType"] = options.fractionalType ?? "PROBABILITY";
     if (!options.omitMaximumFractionalValue) dataset["MaximumFractionalValue"] = options.maximumFractionalValue ?? 255;
   }
@@ -537,7 +603,7 @@ export function encodeSegFrames(options: EncodeSegOptions): ArrayBuffer {
   };
   const dicomDict = new DicomDict(DicomMetaDictionary.denaturalizeDataset(meta));
   dicomDict.dict = DicomMetaDictionary.denaturalizeDataset(dataset) as Record<string, unknown>;
-  dicomDict.dict[TAG_PIXEL_DATA] = { vr: "OB", Value: [pixelBuffer] };
+  dicomDict.dict[TAG_PIXEL_DATA] = { vr: isLabelmap && labelmapBits === 16 ? "OW" : "OB", Value: [pixelBuffer] };
 
   return dicomDict.write() as ArrayBuffer;
 }
@@ -581,8 +647,16 @@ export interface WriteSegOptions {
    */
   readonly fieldScale?: "unit" | "raw";
   readonly segments: readonly WriteSegSegment[];
-  /** Default `"NO"` for one segment, `"UNDEFINED"` for more. */
+  /** Default `"NO"` for one segment, `"UNDEFINED"` for more. Forced to `"NO"` for LABELMAP
+   *  (a partition). */
   readonly segmentsOverlap?: SegmentsOverlap;
+  /**
+   * `"full"` (default) — one frame per (segment, plane) over the whole grid, so
+   * `writeSeg` → `readSeg` is an exact identity, empty planes included. `"sparse"` — omit a
+   * frame whose slice is entirely background (BINARY/FRACTIONAL: all-zero; LABELMAP:
+   * all-zero after labelling). Matches how real files are stored; `readSeg` reads either.
+   */
+  readonly frameCoverage?: "full" | "sparse";
   /** Default: the shared geometry's `frameOfReferenceUID`, else a fresh UID. */
   readonly frameOfReferenceUID?: string;
   readonly contentLabel?: string;
@@ -591,16 +665,21 @@ export interface WriteSegOptions {
 
 export function writeSeg(options: WriteSegOptions): ArrayBuffer {
   const isBinary = options.segmentationType === "BINARY";
-  if (options.segmentationType !== "BINARY" && options.segmentationType !== "FRACTIONAL") {
-    throw new TypeError(`writeSeg: segmentationType must be "BINARY" or "FRACTIONAL", got ${JSON.stringify(options.segmentationType)}`);
+  const isLabelmap = options.segmentationType === "LABELMAP";
+  const isFractional = options.segmentationType === "FRACTIONAL";
+  if (!isBinary && !isFractional && !isLabelmap) {
+    throw new TypeError(
+      `writeSeg: segmentationType must be "BINARY", "FRACTIONAL", or "LABELMAP", got ${JSON.stringify(options.segmentationType)}`,
+    );
   }
-  if (!isBinary && options.fractionalType === undefined) {
+  if (isFractional && options.fractionalType === undefined) {
     throw new TypeError(
       'writeSeg: a FRACTIONAL segmentation requires an explicit fractionalType ("PROBABILITY" or "OCCUPANCY") — ' +
         "there is no default (FRACTIONAL-SEG.md §1)",
     );
   }
   if (options.segments.length === 0) throw new RangeError("writeSeg: at least one segment is required");
+  const sparse = options.frameCoverage === "sparse";
 
   const numbers = new Set<number>();
   for (const s of options.segments) {
@@ -612,15 +691,16 @@ export function writeSeg(options: WriteSegOptions): ArrayBuffer {
   }
 
   const maxFractional = options.maximumFractionalValue ?? 255;
-  if (!isBinary && (!Number.isInteger(maxFractional) || maxFractional < 1 || maxFractional > 255)) {
+  if (isFractional && (!Number.isInteger(maxFractional) || maxFractional < 1 || maxFractional > 255)) {
     throw new RangeError(`writeSeg: maximumFractionalValue must be an integer in [1, 255], got ${maxFractional}`);
   }
   const rawScale = options.fieldScale === "raw";
+  const wantsMask = isBinary || isLabelmap;
 
   const structures = options.segments.map((s) => {
-    const structure = isBinary ? s.mask : s.field;
+    const structure = wantsMask ? s.mask : s.field;
     if (!structure) {
-      throw new TypeError(`writeSeg: segment ${s.number} is missing its ${isBinary ? "mask" : "field"}`);
+      throw new TypeError(`writeSeg: segment ${s.number} is missing its ${wantsMask ? "mask" : "field"}`);
     }
     return structure;
   });
@@ -628,7 +708,7 @@ export function writeSeg(options: WriteSegOptions): ArrayBuffer {
   for (let i = 1; i < structures.length; i++) {
     if (!(structures[i] as Mask3D | ScalarField3D).geometry.equals(geometry, options.tolerance)) {
       throw new GridMismatchError(
-        `writeSeg: segment ${options.segments[i]!.number}'s ${isBinary ? "mask" : "field"} is on a different grid than segment ${options.segments[0]!.number}'s — every segment must share one GridGeometry`,
+        `writeSeg: segment ${options.segments[i]!.number}'s ${wantsMask ? "mask" : "field"} is on a different grid than segment ${options.segments[0]!.number}'s — every segment must share one GridGeometry`,
       );
     }
   }
@@ -640,33 +720,67 @@ export function writeSeg(options: WriteSegOptions): ArrayBuffer {
   const planePositions = geometry.planes.map((p) => p.position);
   const sliceThickness = planeCount >= 2 ? geometry.planeThicknessMm(0) : 1;
 
-  // One frame per (segment, plane) across the whole shared geometry — so
-  // writeSeg → readSeg is an exact identity on the grid, empty planes included.
-  // (Real files usually omit all-zero frames; reading handles that, sparse
-  // *writing* is a later feature.)
+  // `"full"` (default): one frame per (segment, plane) over the whole grid, so
+  // writeSeg → readSeg is an exact identity. `"sparse"`: skip an all-background slice.
   const frames: WriteSegFrame[] = [];
-  options.segments.forEach((s, si) => {
-    const structure = structures[si]!;
+  let labelmapBits: 8 | 16 = 8;
+
+  if (isLabelmap) {
+    const maxSeg = Math.max(...options.segments.map((s) => s.number));
+    labelmapBits = maxSeg > 255 ? 16 : 8;
     for (let k = 0; k < planeCount; k++) {
-      const slice = (structure as Mask3D | ScalarField3D).getSliceBuffer(k);
-      const pixels = new Uint8Array(rc);
-      for (let i = 0; i < rc; i++) {
-        const v = slice[i] as number;
-        if (isBinary) {
-          pixels[i] = v !== 0 ? 1 : 0;
-        } else {
-          let stored = Math.round(rawScale ? v : v * maxFractional);
-          if (stored < 0) stored = 0;
-          if (stored > maxFractional) stored = maxFractional;
-          pixels[i] = stored;
+      const pixels = maxSeg > 255 ? new Uint16Array(rc) : new Uint8Array(rc);
+      let anySet = false;
+      for (let si = 0; si < options.segments.length; si++) {
+        const s = options.segments[si]!;
+        const slice = (structures[si] as Mask3D).getSliceBuffer(k);
+        for (let i = 0; i < rc; i++) {
+          if (slice[i] === 0) continue;
+          if (pixels[i] !== 0) {
+            throw new LabelmapOverlapError(
+              `segments ${pixels[i]} and ${s.number} both set the voxel at plane ${k}, index ${i} — ` +
+                "LABELMAP stores one label per pixel. Use segmentationType \"BINARY\" for overlapping segments.",
+            );
+          }
+          pixels[i] = s.number;
+          anySet = true;
         }
       }
-      frames.push({ segmentNumber: s.number, position: planePositions[k] as Vec3, pixels });
+      if (sparse && !anySet) continue;
+      frames.push({ segmentNumber: 0, position: planePositions[k] as Vec3, pixels });
     }
-  });
+  } else {
+    options.segments.forEach((s, si) => {
+      const structure = structures[si]!;
+      for (let k = 0; k < planeCount; k++) {
+        const slice = (structure as Mask3D | ScalarField3D).getSliceBuffer(k);
+        const pixels = new Uint8Array(rc);
+        let anySet = false;
+        for (let i = 0; i < rc; i++) {
+          const v = slice[i] as number;
+          if (isBinary) {
+            pixels[i] = v !== 0 ? 1 : 0;
+          } else {
+            let stored = Math.round(rawScale ? v : v * maxFractional);
+            if (stored < 0) stored = 0;
+            if (stored > maxFractional) stored = maxFractional;
+            pixels[i] = stored;
+          }
+          if (pixels[i] !== 0) anySet = true;
+        }
+        if (sparse && !anySet) continue;
+        frames.push({ segmentNumber: s.number, position: planePositions[k] as Vec3, pixels });
+      }
+    });
+  }
 
-  const segmentsOverlap: SegmentsOverlap =
-    options.segmentsOverlap ?? (options.segments.length === 1 ? "NO" : "UNDEFINED");
+  if (frames.length === 0) {
+    throw new RangeError("writeSeg: frameCoverage \"sparse\" produced no frames — every segment is empty");
+  }
+
+  const segmentsOverlap: SegmentsOverlap = isLabelmap
+    ? "NO"
+    : options.segmentsOverlap ?? (options.segments.length === 1 ? "NO" : "UNDEFINED");
 
   const encodeOptions: EncodeSegOptions = {
     rows,
@@ -692,7 +806,8 @@ export function writeSeg(options: WriteSegOptions): ArrayBuffer {
     ...(options.frameOfReferenceUID ?? geometry.frameOfReferenceUID
       ? { frameOfReferenceUID: (options.frameOfReferenceUID ?? geometry.frameOfReferenceUID) as string }
       : {}),
-    ...(isBinary ? {} : { fractionalType: options.fractionalType, maximumFractionalValue: maxFractional }),
+    ...(isFractional ? { fractionalType: options.fractionalType, maximumFractionalValue: maxFractional } : {}),
+    ...(isLabelmap ? { labelmapBitsAllocated: labelmapBits } : {}),
   };
 
   return encodeSegFrames(encodeOptions);
