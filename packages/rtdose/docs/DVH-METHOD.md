@@ -45,19 +45,36 @@ Interpolation happens along the plane axis by the planes' **projected positions*
 irregularly spaced dose or structure stack is handled correctly rather than assuming a
 constant pitch.
 
-## 3. Partial volume at the structure boundary
+## 3. Partial volume and supersampling
 
-**Whole-voxel binary.** A structure voxel is either in the ROI or not; there is no
-fractional edge weight. `method.volumePolicy` is always `"whole-voxel-binary"`.
+### Default — whole-voxel binary
+
+A structure voxel is either in the ROI or not; there is no fractional edge weight.
+`method.volumePolicy` is `"whole-voxel-binary"` and one dose sample is taken per voxel.
 
 Each voxel contributes its full physical volume, computed as
 `pixelSpacing[0] · pixelSpacing[1] · planeThicknessMm(k)` on the **structure** grid, where
 `planeThicknessMm` is the average distance to the neighbouring planes (so irregular slice
 spacing is accounted for). This is `rt-geometry-js`'s `Mask3D.volume({ method: "voxel" })`.
 
-On a small structure — a few voxels across — this policy moves D95 and V20 visibly versus
-a TPS that supersamples or weights boundary voxels by fractional coverage. Supersampling is
-deferred to a later minor version.
+### `volumePolicy: "supersample"` (0.2.0)
+
+Pass `{ volumePolicy: "supersample", supersampling: k }` (`k` an integer in `[2, 4]`,
+default `2`) to any of `statistics` / `getD` / `getV` / `calculateDVH`. Each occupied
+structure voxel is split into `k³` sub-voxels; the **raw** dose field is point-sampled
+(same interpolation as §2) at every sub-voxel centre, and each sub-voxel carries
+`1/k³` of the voxel's physical volume. The returned `method` then reads
+`volumePolicy: "supersampled"`, `resampling: "dose-sampled-at-structure-subvoxel-centres"`,
+`supersampling: k`, `resampledToMaskGrid: false` (there is no resample — the dose is
+sampled directly).
+
+This resolves a steep dose gradient *across* a voxel that a single centre sample misses.
+On a small structure it moves D95 and V20 — a single voxel straddling a 40 Gy/mm gradient
+reports min = max = its centre dose under the default, but a spread of ±(half a voxel × the
+gradient) under `k = 2`. It does **not** recover sub-voxel *boundary* coverage: the mask is
+already binary, so a partially-included edge voxel is still all-or-nothing. Cost scales as
+`k³` × the sample count. The whole-voxel path is unchanged and remains the default (it is
+what the `dicompyler-core` validation in `VALIDATION.md` covers).
 
 ## 4. Derived quantities
 
@@ -77,5 +94,9 @@ Given the resampled dose field `f` and the structure mask `m` on the same grid:
   volume; the last is at the max dose with volume 0. `meanDoseGy` on the result is the same
   volume-weighted mean as `statistics`.
 
-All four reduce to a single pass over the occupied voxels of the resampled field; none of
-them re-interpolate per query.
+By default all four reduce to a single pass over the occupied voxels of the resampled
+field; none of them re-interpolate per query. Under `volumePolicy: "supersample"` the same
+four run over the `k³`-per-voxel sub-sample list instead (`getD`/`getV` with the identical
+sort-and-walk / threshold logic, `calculateDVH` binning the sub-samples the same way
+`histogram` bins voxels), and the dose is sampled from the raw field at each sub-centre
+rather than read from a resample.

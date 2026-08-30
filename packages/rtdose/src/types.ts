@@ -8,18 +8,28 @@ import type { InterpMethod } from "rt-geometry-js";
  */
 export interface DoseMethod {
   /**
-   * Which grid the voxel-by-voxel computation happened on. `rtdose-js` samples the dose
-   * **at the structure's voxel centres** (roadmap §6.1 default) — the dose field is
-   * resampled onto the mask's grid, never the reverse.
+   * Where the dose was sampled. `"dose-sampled-at-structure-voxel-centres"` (default) —
+   * the dose field is resampled onto the mask's grid, one value per structure voxel.
+   * `"dose-sampled-at-structure-subvoxel-centres"` — with `volumePolicy: "supersample"`,
+   * each structure voxel is split `supersampling`³ ways and the dose sampled at every
+   * sub-voxel centre.
    */
-  readonly resampling: "dose-sampled-at-structure-voxel-centres";
-  /** Interpolation used when resampling the dose field. `"trilinear"` unless overridden. */
+  readonly resampling:
+    | "dose-sampled-at-structure-voxel-centres"
+    | "dose-sampled-at-structure-subvoxel-centres";
+  /** Interpolation used when sampling the dose field. `"trilinear"` unless overridden. */
   readonly interpolation: InterpMethod;
   /**
-   * A structure voxel counts fully or not at all — no fractional edge coverage
-   * (roadmap §6.3). Supersampling is deferred to a later minor.
+   * `"whole-voxel-binary"` (default) — a structure voxel counts fully or not at all.
+   * `"supersampled"` — each voxel was split into `supersampling`³ sub-voxels, each
+   * carrying `1/supersampling³` of the voxel volume and its own dose sample; this tracks a
+   * steep dose gradient across a voxel and moves D95/V20 on small structures (see
+   * `docs/DVH-METHOD.md`). Neither recovers sub-voxel *boundary* coverage — the mask is
+   * already binary.
    */
-  readonly volumePolicy: "whole-voxel-binary";
+  readonly volumePolicy: "whole-voxel-binary" | "supersampled";
+  /** The `k` in `k³` sub-voxels, present only when `volumePolicy` is `"supersampled"`. */
+  readonly supersampling?: number;
   /**
    * `false` when the dose grid already coincided with the mask's grid (no resample was
    * needed); `true` when the dose field was resampled onto the mask.
@@ -78,16 +88,23 @@ export interface VolumeAtDose {
   readonly method: DoseMethod;
 }
 
-export interface DvhOptions {
-  /** Equal-width dose bins spanning `[0, maxDose]`. Default `256`. */
-  bins?: number;
-  /** Interpolation for the dose→structure resample. Default `"trilinear"`. */
+export interface DoseQueryOptions {
+  /** Interpolation for the dose sample. Default `"trilinear"`. */
   method?: InterpMethod;
+  /**
+   * `"whole-voxel-binary"` (default) — one dose sample per structure voxel.
+   * `"supersample"` — split each voxel `supersampling`³ ways (default `2`) and sample the
+   * dose at every sub-voxel centre. Slower (≈ `k³`×) but tracks a steep gradient across a
+   * voxel; matters most for small structures. Recorded on the returned `method`.
+   */
+  volumePolicy?: "whole-voxel-binary" | "supersample";
+  /** The `k` for `"supersample"`. Integer in `[2, 4]`. Default `2`. */
+  supersampling?: number;
 }
 
-export interface DoseQueryOptions {
-  /** Interpolation for the dose→structure resample. Default `"trilinear"`. */
-  method?: InterpMethod;
+export interface DvhOptions extends DoseQueryOptions {
+  /** Equal-width dose bins spanning `[0, maxDose]`. Default `256`. */
+  bins?: number;
 }
 
 export interface DoseSampleOptions {

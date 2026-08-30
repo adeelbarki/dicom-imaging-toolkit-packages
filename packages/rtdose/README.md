@@ -12,12 +12,13 @@ DICOM **RTDOSE** reading and dose-volume histograms, built on
 [`rt-geometry-js`](https://www.npmjs.com/package/rt-geometry-js). Part of the
 [DICOM imaging toolkit](https://github.com/adeelbarki/dicom-imaging-toolkit-packages).
 
-**Status:** published — [`rtdose-js`](https://www.npmjs.com/package/rtdose-js) 0.1.1 on npm.
+**Status:** published — [`rtdose-js`](https://www.npmjs.com/package/rtdose-js) 0.2.0 on npm.
 Reads a dose grid, samples it at a point, and answers D/V/mean/DVH queries against a
 structure mask. Requires the peer dependency
 [`rt-geometry-js`](https://www.npmjs.com/package/rt-geometry-js) (`^1.0.0`);
-`npm install rtdose-js rt-geometry-js`. (0.1.1 only bumps the peer range to the
-stabilised core — no API change.)
+`npm install rtdose-js rt-geometry-js`. 0.2.0 adds `volumePolicy: "supersample"` (sub-voxel
+dose sampling for small structures in steep gradients); the default path is unchanged and
+still matches `dicompyler-core` 194/195.
 
 **Validated against real DICOM files**, not just phantoms — `rtdose-js`'s D2/D50/D95,
 V5Gy/V20Gy/V30Gy, and mean/min/max dose are cross-checked against `dicompyler-core` on real
@@ -56,6 +57,10 @@ dose.getV(20, ptv);            // { doseGy: 20, volumeMm3, volumeFraction, metho
 dose.statistics(ptv);         // { minGy, maxGy, meanGy, volumeMm3, voxelCount, method }
 dose.calculateDVH(ptv);       // { kind: "cumulative", points: [{ doseGy, volumeMm3, volumeFraction }], ... }
 dose.sample([x, y, z]);       // interpolated dose at a physical point (0 outside the grid)
+
+// steep gradient across a small structure — split each voxel 2³ ways:
+dose.getD(95, ptv, { volumePolicy: "supersample" });            // supersampling defaults to 2
+dose.getV(20, ptv, { volumePolicy: "supersample", supersampling: 3 });
 ```
 
 `rtstruct-js` is only used here to produce the ROI `Mask3D` — it is **not** a dependency of
@@ -98,10 +103,17 @@ dose.getD(95, ptv).method
 // }
 ```
 
-`volumePolicy` is `"whole-voxel-binary"` — a structure voxel counts fully or not at all,
-no fractional edge coverage. This moves D95 and V20 on small structures; supersampling is
-deferred to a later minor. `resampledToMaskGrid` is `false` only when the dose grid already
-coincides with the mask's grid. See [`docs/DVH-METHOD.md`](docs/DVH-METHOD.md).
+`volumePolicy` defaults to `"whole-voxel-binary"` — a structure voxel counts fully or not
+at all, no fractional edge coverage, one dose sample per voxel. `resampledToMaskGrid` is
+`false` only when the dose grid already coincides with the mask's grid.
+
+Pass `{ volumePolicy: "supersample", supersampling: k }` (`k` in `[2, 4]`, default `2`) to
+any of `statistics` / `getD` / `getV` / `calculateDVH` to split each structure voxel `k³`
+ways and sample the dose at every sub-voxel centre — it resolves a steep gradient across a
+voxel and shifts D95/V20 on small structures. The returned `method` then reads
+`volumePolicy: "supersampled"`, `supersampling: k`,
+`resampling: "dose-sampled-at-structure-subvoxel-centres"`. Costs `k³`× the sampling work.
+See [`docs/DVH-METHOD.md`](docs/DVH-METHOD.md).
 
 ## License
 

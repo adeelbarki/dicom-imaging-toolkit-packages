@@ -1,6 +1,6 @@
 {
   "name": "rtdose-js",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "type": "module",
   "description": "DICOM RTDOSE reading and dose-volume histograms (D95/V20/mean), built on rt-geometry-js. Research/QA tooling — not a treatment planning system.",
   "keywords": [

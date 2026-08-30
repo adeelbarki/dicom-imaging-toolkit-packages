@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.2.0] - 2026-08-30
+
+Additive — `rt-geometry-js` peer stays `^1.0.0`, and the default behaviour of every
+method is byte-for-byte unchanged (the `dicompyler-core` agreement in `VALIDATION.md` was
+re-run: same 194/195).
+
+### Added
+
+- **`volumePolicy: "supersample"`** on `statistics` / `getD` / `getV` / `calculateDVH`
+  (via `DoseQueryOptions` / `DvhOptions`). Splits each occupied structure voxel into
+  `supersampling`³ sub-voxels (`supersampling` an integer in `[2, 4]`, default `2`),
+  point-samples the **raw** dose field at every sub-voxel centre, and gives each sub-voxel
+  `1/k³` of the voxel volume. Resolves a steep dose gradient across a voxel that a single
+  centre sample misses — moves D95/V20 on small structures. No resample is involved
+  (`method.resampledToMaskGrid` is `false`). Cost scales `k³`×. See `docs/DVH-METHOD.md` §3.
+- `DoseMethod` now carries `volumePolicy: "whole-voxel-binary" | "supersampled"`,
+  `supersampling?: number`, and a second `resampling` value
+  `"dose-sampled-at-structure-subvoxel-centres"`.
+- A cross-frame-of-reference mask under supersampling throws `FrameOfReferenceMismatchError`
+  (matching the whole-voxel path, which throws it via `resampleField`).
+
+### Changed
+
+- `DvhOptions` now `extends DoseQueryOptions` (it gains `volumePolicy` / `supersampling`;
+  it already had `method`). `bins` unchanged. No break for existing call sites.
+
 ## [0.1.1] - 2026-08-30
 
 No API change. Peer dependency `rt-geometry-js` bumped `^0.1.1` → `^1.0.0` — the shared
