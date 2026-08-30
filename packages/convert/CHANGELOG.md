@@ -32,7 +32,14 @@ lossy step recorded in provenance.
   (including diagnostics carried across from the source object).
 - Errors: `ConversionError` (base), `MissingThresholdError`, `SegmentNotFoundError`.
 
+### Validation
+
+- Round-trip harness in [`scripts/validation/`](scripts/validation/) run against real TCIA
+  data — see [`VALIDATION.md`](VALIDATION.md). RTSTRUCT → SEG round trips voxel-for-voxel
+  (`voxelDisagreement === 0`) across three authoring tools; SEG → RTSTRUCT fidelity is
+  measured and matches the figure `provenance` reports.
+
 ### Depends on
 
-- `rt-geometry-js` `^0.1.2`, `rtstruct-js` `^0.3.1`, `dicom-seg-js` `^0.1.0` — all peer
+- `rt-geometry-js` `^1.0.0`, `rtstruct-js` `^0.3.2`, `dicom-seg-js` `^0.1.1` — all peer
   dependencies. This is the only toolkit package that depends on two domain packages.
