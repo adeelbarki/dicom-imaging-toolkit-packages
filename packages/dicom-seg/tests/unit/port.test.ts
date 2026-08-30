@@ -107,14 +107,21 @@ describe("readSegDataset", () => {
     expect(p.diagnostics.map((d) => d.code)).toContain("SEGMENTS_OVERLAP");
   });
 
-  it("PARSE-07 rejects LABELMAP with a pointer to 0.2.0", () => {
-    const bytes = encodeSegFrames({
+  it("PARSE-07 rejects an unknown SegmentationType, and a LABELMAP with bad BitsAllocated", () => {
+    const unknown = encodeSegFrames({
+      rows: 2, columns: 2, segmentationType: "BINARY", forceType: "SURFACE",
+      segments: [{ number: 1 }],
+      frames: [{ segmentNumber: 1, position: [0, 0, 0], pixels: [1, 0, 0, 0] }],
+    });
+    expect(() => readSegDataset(unknown)).toThrow(UnsupportedSegmentationTypeError);
+
+    // "LABELMAP" over a 1-bit BINARY stream (BitsAllocated 1) is malformed, not unsupported
+    const badLabelmap = encodeSegFrames({
       rows: 2, columns: 2, segmentationType: "BINARY", forceType: "LABELMAP",
       segments: [{ number: 1 }],
-      frames: [{ segmentNumber: 1, position: [0, 0, 0], pixels: [1, 0, 0, 0] },
-        { segmentNumber: 1, position: [0, 0, 1], pixels: [0, 0, 0, 0] }],
+      frames: [{ segmentNumber: 1, position: [0, 0, 0], pixels: [1, 0, 0, 0] }],
     });
-    expect(() => readSegDataset(bytes)).toThrow(UnsupportedSegmentationTypeError);
+    expect(() => readSegDataset(badLabelmap)).toThrow(/BitsAllocated/);
   });
 
   it("PARSE-08 rejects a non-SEG SOP class", () => {

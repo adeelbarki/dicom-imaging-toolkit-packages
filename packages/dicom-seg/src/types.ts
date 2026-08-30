@@ -1,8 +1,16 @@
 /**
- * Segmentation type. dicom-seg-js 0.1.0 handles `BINARY` and `FRACTIONAL`; `LABELMAP`
- * (PS3.3 Sup 243) throws {@link UnsupportedSegmentationTypeError} until 0.2.0.
+ * `SegmentationType` (0062,0001).
+ *
+ * - `BINARY` — 1 bit per pixel, one frame per (segment, plane).
+ * - `FRACTIONAL` — 8 bits per pixel, `0..MaximumFractionalValue`, one frame per
+ *   (segment, plane). {@link FractionalType} says whether the value is a probability or an
+ *   occupancy.
+ * - `LABELMAP` (PS3.3 Sup 243) — one frame per **plane**, each pixel an integer equal to
+ *   the `SegmentNumber` it belongs to (`0` = background). A partition: a voxel has at most
+ *   one label. `seg.mask(n)` returns the voxels whose label is `n`; there is no
+ *   `seg.field()`.
  */
-export type SegmentationType = "BINARY" | "FRACTIONAL";
+export type SegmentationType = "BINARY" | "FRACTIONAL" | "LABELMAP";
 
 /**
  * `SegmentationFractionalType` (0062,0010). PROBABILITY = "the probability that the

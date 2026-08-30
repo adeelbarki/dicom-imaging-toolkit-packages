@@ -24,7 +24,7 @@ import {
   type ScalarField3D,
   type Vec3,
 } from "rt-geometry-js";
-import { binaryFrame, fractionalFrame, readSegDataset, type ParsedSeg } from "./dicom/port.js";
+import { binaryFrame, fractionalFrame, labelmapFrame, readSegDataset, type ParsedSeg } from "./dicom/port.js";
 import { SegmentationTypeMismatchError } from "./errors.js";
 import type { FractionalType, SegmentInfo, SegmentationType, SegmentsOverlap } from "./types.js";
 
@@ -56,6 +56,9 @@ export class Segmentation {
   readonly geometry: GridGeometry;
   readonly frameOfReferenceUID: string | undefined;
   readonly contentLabel: string | undefined;
+  /** `NumberOfFrames` (0028,0008) — total frames stored. A sparse SEG has fewer than
+   *  `segments × planes`; a LABELMAP has one per plane. */
+  readonly numberOfFrames: number;
   readonly diagnostics: readonly Diagnostic[];
 
   private readonly parsed: ParsedSeg;
@@ -72,6 +75,7 @@ export class Segmentation {
     this.geometry = parsed.geometry;
     this.frameOfReferenceUID = parsed.frameOfReferenceUID;
     this.contentLabel = parsed.contentLabel;
+    this.numberOfFrames = parsed.numberOfFrames;
     this.diagnostics = parsed.diagnostics;
   }
 
@@ -101,14 +105,15 @@ export class Segmentation {
   }
 
   /**
-   * The boolean mask for a **BINARY** segment. Throws {@link SegmentationTypeMismatchError}
+   * The boolean mask for a segment. **BINARY** — the segment's frames. **LABELMAP** — the
+   * voxels whose label equals `segmentNumber`. Throws {@link SegmentationTypeMismatchError}
    * on a FRACTIONAL SEG — threshold `field(n)` yourself, there is no safe default cut.
    */
   mask(segmentNumber: number): Mask3D {
     this.assertSegment(segmentNumber);
-    if (this.type !== "BINARY") {
+    if (this.type === "FRACTIONAL") {
       throw new SegmentationTypeMismatchError(
-        `mask() is for BINARY segmentations; this is FRACTIONAL — use field(${segmentNumber}) and apply your own threshold`,
+        `mask() is for BINARY / LABELMAP segmentations; this is FRACTIONAL — use field(${segmentNumber}) and apply your own threshold`,
       );
     }
     const cached = this.maskCache.get(segmentNumber);
@@ -116,11 +121,19 @@ export class Segmentation {
 
     const rc = this.sliceSize;
     const data = new Uint8Array(this.parsed.geometry.planes.length * rc);
-    for (const fr of this.parsed.frames) {
-      if (fr.segmentNumber !== segmentNumber) continue;
-      const bits = binaryFrame(this.parsed, fr.frameIndex);
-      const base = fr.planeIndex * rc;
-      for (let i = 0; i < rc; i++) if (bits[i]) data[base + i] = 1;
+    if (this.type === "LABELMAP") {
+      for (const fr of this.parsed.frames) {
+        const labels = labelmapFrame(this.parsed, fr.frameIndex);
+        const base = fr.planeIndex * rc;
+        for (let i = 0; i < rc; i++) if (labels[i] === segmentNumber) data[base + i] = 1;
+      }
+    } else {
+      for (const fr of this.parsed.frames) {
+        if (fr.segmentNumber !== segmentNumber) continue;
+        const bits = binaryFrame(this.parsed, fr.frameIndex);
+        const base = fr.planeIndex * rc;
+        for (let i = 0; i < rc; i++) if (bits[i]) data[base + i] = 1;
+      }
     }
     const mask = maskFromDense(this.parsed.geometry, data);
     this.maskCache.set(segmentNumber, mask);
@@ -145,7 +158,7 @@ export class Segmentation {
     this.assertSegment(segmentNumber);
     if (this.type !== "FRACTIONAL") {
       throw new SegmentationTypeMismatchError(
-        `field() is for FRACTIONAL segmentations; this is BINARY — use mask(${segmentNumber})`,
+        `field() is for FRACTIONAL segmentations; this is ${this.type} — use mask(${segmentNumber})`,
       );
     }
     const cached = cache.get(segmentNumber);
@@ -172,7 +185,7 @@ export class Segmentation {
    * region the model marked at all".
    */
   support(segmentNumber: number): Mask3D {
-    if (this.type === "BINARY") return this.mask(segmentNumber);
+    if (this.type === "BINARY" || this.type === "LABELMAP") return this.mask(segmentNumber);
     const raw = this.rawField(segmentNumber);
     const [columns, rows, planes] = raw.dimensions;
     const data = new Uint8Array(columns * rows * planes);

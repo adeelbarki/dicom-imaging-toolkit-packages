@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.2.0] - 2026-08-30
+
+Additive — `^1.0.0` peer unchanged.
+
+### Added
+
+- **`LABELMAP` (PS3.3 Sup 243) read and write.** `readSeg` accepts a LABELMAP SEG
+  (one 8- or 16-bit integer-per-pixel frame per plane, pixel value = `SegmentNumber`,
+  `0` = background); `seg.type === "LABELMAP"` and `seg.mask(n)` returns the voxels whose
+  label is `n`. `writeSeg({ segmentationType: "LABELMAP", segments: [{ number, mask }] })`
+  writes one — 8-bit unless a segment number exceeds 255. LABELMAP is a partition:
+  overlapping input masks throw the new `LabelmapOverlapError`. `seg.field()` throws
+  `SegmentationTypeMismatchError` on a LABELMAP.
+- **`writeSeg({ frameCoverage: "sparse" })`** — omit a frame whose slice is all-background.
+  Default stays `"full"` (one frame per segment × plane, exact `writeSeg` → `readSeg`
+  identity). Under `"sparse"` the reader reconstructs the grid only across planes that have
+  a frame; an all-empty segment throws `RangeError`.
+- `Segmentation.numberOfFrames` — the stored frame count (`< segments × planes` for a
+  sparse SEG; one per plane for LABELMAP).
+
+### Changed
+
+- `UnsupportedSegmentationTypeError` is no longer raised for LABELMAP (now supported); it
+  is reserved for an unknown/vendor `SegmentationType`. An absent `SegmentationType` is a
+  `MalformedSegmentationError`.
+- `mask()` now serves BINARY *and* LABELMAP; `field()`'s type-mismatch message names the
+  actual type.
+
 ## [0.1.1] - 2026-08-30
 
 No API change. Peer dependency `rt-geometry-js` bumped `^0.1.2` → `^1.0.0` — the shared

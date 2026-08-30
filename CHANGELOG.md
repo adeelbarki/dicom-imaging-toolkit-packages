@@ -15,8 +15,17 @@ changelog:
 | `rt-geometry-js` | 1.1.0 | published |
 | `rtstruct-js` | 0.4.0 | published |
 | `rtdose-js` | 0.1.1 | published |
-| `dicom-seg-js` | 0.1.1 | published |
+| `dicom-seg-js` | 0.2.0 | published |
 | `rt-convert-js` | 0.1.0 | not yet published |
+
+## 2026-08-30 — SEG LABELMAP + sparse write
+
+- **`dicom-seg-js` → 0.2.0** (additive): `LABELMAP` (PS3.3 Sup 243) read and
+  write — one label per pixel, `seg.mask(n)` returns the voxels whose label is
+  `n`; overlapping input to a LABELMAP write throws `LabelmapOverlapError`.
+  `writeSeg({ frameCoverage: "sparse" })` omits all-background frames.
+  `Segmentation.numberOfFrames` added. `UnsupportedSegmentationTypeError` now
+  only for an unknown type. Peer stays `rt-geometry-js ^1.0.0`.
 
 ## 2026-08-30 — RTSTRUCT SOP-reference slice association
 
