@@ -8,15 +8,28 @@ import {
   type HoleInterpretation,
   type Mask3D,
   type Provenance,
+  type SliceAssociation,
   type Vec3,
 } from "rt-geometry-js";
 import { MalformedContourError, XorHomogeneityError } from "../errors.js";
+import type { SliceAssociationDetail } from "../types.js";
 import type { Contour, ContourGeometricType } from "./types.js";
 
 export interface RasterizeResult {
   readonly mask: Mask3D;
   readonly provenance: Provenance;
+  readonly sliceAssociationDetail: SliceAssociationDetail;
   readonly diagnostics: readonly Diagnostic[];
+}
+
+export interface RasterizeOptions {
+  /**
+   * Maps a CT/MR slice's `SOPInstanceUID` to its plane index in `grid`. Built by
+   * `RTStruct.load` from a supplied `SeriesGeometry`. When present, a contour whose
+   * `ContourImageSequence` names one of these UIDs is placed on that plane
+   * (authoritative); otherwise placement falls back to nearest-plane geometry.
+   */
+  readonly sopInstanceUIDToPlaneIndex?: ReadonlyMap<string, number>;
 }
 
 function at<T>(arr: readonly T[], index: number): T {
@@ -135,19 +148,23 @@ function fillPlane(
   }
 }
 
-function createProvenance(holeInterpretation: HoleInterpretation): Provenance {
+function createProvenance(holeInterpretation: HoleInterpretation, sliceAssociation: SliceAssociation): Provenance {
   return {
-    sliceAssociation: "geometric-fallback",
+    sliceAssociation,
     holeInterpretation,
     frameOfReferenceOverride: false,
     redact(): Provenance {
-      return createProvenance(holeInterpretation);
+      return createProvenance(holeInterpretation, sliceAssociation);
     },
   };
 }
 
 /** contours -> mask. Half-open edge rule (y0 <= y < y1) — see IMPLEMENTATION_PLAN.md Phase 3. */
-export function rasterize(contours: readonly Contour[], grid: GridGeometry): RasterizeResult {
+export function rasterize(
+  contours: readonly Contour[],
+  grid: GridGeometry,
+  options: RasterizeOptions = {},
+): RasterizeResult {
   for (const contour of contours) {
     const min = MIN_POINTS[contour.geometricType];
     if (contour.points.length < min) {
@@ -198,9 +215,53 @@ export function rasterize(contours: readonly Contour[], grid: GridGeometry): Ras
   // Group by plane FIRST — hole interpretation is a per-plane question (multiple contours
   // spread across different planes are not "nested," they're just different slices), and
   // grouping also validates slice association instead of trusting contour.points[0] blindly.
+  const sopMap = options.sopInstanceUIDToPlaneIndex;
+  let sopReferenced = 0;
+  let geometricFallback = 0;
+  let unresolvedSopReferences = 0;
+
   const byPlane = new Map<number, Contour[]>();
   for (const contour of fillable) {
-    const { planeIndex, distanceMm } = grid.findNearestPlane(at(contour.points, 0));
+    const geometric = grid.findNearestPlane(at(contour.points, 0));
+
+    // Authoritative association: a resolved ContourImageSequence SOP reference wins over
+    // nearest-plane geometry. Fall back (and count it) when there is no reference, no map
+    // to resolve against, or the referenced UID isn't among the supplied slices.
+    let planeIndex = geometric.planeIndex;
+    let viaSop = false;
+    const refs = contour.referencedSOPInstanceUIDs ?? [];
+    if (refs.length > 0 && sopMap !== undefined) {
+      const hit = refs.map((uid) => sopMap.get(uid)).find((idx): idx is number => idx !== undefined);
+      if (hit !== undefined) {
+        planeIndex = hit;
+        viaSop = true;
+        if (hit !== geometric.planeIndex) {
+          diagnostics.push(
+            createDiagnostic(
+              "SOP_REFERENCE_PLANE_MISMATCH",
+              "info",
+              `contour's ContourImageSequence points to plane ${hit}, but its geometry is ` +
+                `nearest plane ${geometric.planeIndex} — used the SOP reference (authoritative)`,
+              { planeIndex: hit, distanceMm: geometric.distanceMm },
+            ),
+          );
+        }
+      } else {
+        unresolvedSopReferences++;
+        diagnostics.push(
+          createDiagnostic(
+            "SOP_REFERENCE_UNRESOLVED",
+            "info",
+            `contour references SOPInstanceUID ${JSON.stringify(refs[0])}, not found among the ` +
+              `supplied slices — fell back to nearest-plane geometry (plane ${geometric.planeIndex})`,
+          ),
+        );
+      }
+    }
+    if (viaSop) sopReferenced++;
+    else geometricFallback++;
+
+    const distanceMm = viaSop ? distanceToPlaneMm(at(contour.points, 0), grid, planeIndex) : geometric.distanceMm;
     const tol = localPlaneToleranceMm(grid, planeIndex);
 
     if (distanceMm > tol) {
@@ -262,9 +323,20 @@ export function rasterize(contours: readonly Contour[], grid: GridGeometry): Ras
     fillPlane(data, planeIndex, sliceSize, grid, planeContours);
   }
 
+  const totalContours = fillable.length;
+  const sliceAssociationDetail: SliceAssociationDetail = {
+    totalContours,
+    sopReferenced,
+    geometricFallback,
+    unresolvedSopReferences,
+  };
+  const sliceAssociation: SliceAssociation =
+    totalContours > 0 && sopReferenced === totalContours ? "sop-reference" : "geometric-fallback";
+
   return {
     mask: maskFromDense(grid, data),
-    provenance: createProvenance(holeInterpretation),
+    provenance: createProvenance(holeInterpretation, sliceAssociation),
+    sliceAssociationDetail,
     diagnostics,
   };
 }
