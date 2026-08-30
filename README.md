@@ -1,5 +1,11 @@
 # dicom-imaging-toolkit-packages
 
+[![CI](https://github.com/adeelbarki/dicom-imaging-toolkit-packages/actions/workflows/ci.yml/badge.svg)](https://github.com/adeelbarki/dicom-imaging-toolkit-packages/actions/workflows/ci.yml)
+[![rt-geometry-js](https://img.shields.io/npm/v/rt-geometry-js?label=rt-geometry-js)](https://www.npmjs.com/package/rt-geometry-js)
+[![rtstruct-js](https://img.shields.io/npm/v/rtstruct-js?label=rtstruct-js)](https://www.npmjs.com/package/rtstruct-js)
+[![rtdose-js](https://img.shields.io/npm/v/rtdose-js?label=rtdose-js)](https://www.npmjs.com/package/rtdose-js)
+[![dicom-seg-js](https://img.shields.io/npm/v/dicom-seg-js?label=dicom-seg-js)](https://www.npmjs.com/package/dicom-seg-js)
+
 A small family of JavaScript/TypeScript packages for working with the
 **radiotherapy and segmentation objects** in DICOM — RT Structure Sets, RT Dose,
 and Segmentation — built on one shared, **standard-agnostic geometry core**.
@@ -17,14 +23,15 @@ copy.
 
 | Package | Version | What it is |
 |---|---|---|
-| [`rt-geometry-js`](packages/geometry/) | 0.1.2 | The shared core. `GridGeometry` / `Mask3D` / `ScalarField3D`, plane sorting, cross-grid resampling, a histogram/DVH engine, analytic phantoms (cube/sphere/torus with closed-form volumes), and comparison metrics (Dice, voxel disagreement, centroid displacement). No DICOM. |
-| [`rtstruct-js`](packages/rtstruct/) | 0.3.0 | DICOM **RT Structure Set** (RTSTRUCT) read + write. Contour → mask rasterization that handles all three hole encodings (nested `CLOSED_PLANAR`, `CLOSEDPLANAR_XOR`, self-touching keyhole) identically. Round-trip volume fidelity checked against phantom closed-form volumes. |
-| [`rtdose-js`](packages/rtdose/) | 0.1.0 | DICOM **RTDOSE** read + dose-volume histograms. D/V/mean/min/max queries against a structure mask, dose sampled at a physical point, cumulative DVH. Every result carries the resampling / interpolation / partial-volume method used to compute it. **Research and QA tooling — not a treatment planning system.** |
-| [`dicom-seg-js`](packages/dicom-seg/) | 0.1.0 | DICOM **Segmentation (SEG)** read + write. `BINARY` masks and `FRACTIONAL` probability/occupancy fields, on the SEG's own grid from the Functional Groups. Exposes honest quantities only (`meanValue`, `volumeAboveThreshold`, `thresholdSensitivity`) — no "accuracy" number anywhere. `LABELMAP` lands in 0.2.0. |
-| `rt-convert-js` | — | *Planned.* RTSTRUCT ↔ SEG conversion. The only package allowed to depend on two domain packages; both directions are lossy and record the loss in provenance. |
+| [`rt-geometry-js`](packages/geometry/) | 1.0.0 | The shared core. `GridGeometry` / `Mask3D` / `ScalarField3D`, plane sorting, cross-grid resampling, a histogram/DVH engine, analytic phantoms (cube/sphere/torus with closed-form volumes), and comparison metrics (Dice, voxel disagreement, centroid displacement). No DICOM. Stability guarantee: [`CONTRACT.md`](packages/geometry/CONTRACT.md). |
+| [`rtstruct-js`](packages/rtstruct/) | 0.3.2 | DICOM **RT Structure Set** (RTSTRUCT) read + write. Contour → mask rasterization that handles all three hole encodings (nested `CLOSED_PLANAR`, `CLOSEDPLANAR_XOR`, self-touching keyhole) identically. Round-trip volume fidelity checked against phantom closed-form volumes. |
+| [`rtdose-js`](packages/rtdose/) | 0.1.1 | DICOM **RTDOSE** read + dose-volume histograms. D/V/mean/min/max queries against a structure mask, dose sampled at a physical point, cumulative DVH. Every result carries the resampling / interpolation / partial-volume method used to compute it. **Research and QA tooling — not a treatment planning system.** |
+| [`dicom-seg-js`](packages/dicom-seg/) | 0.1.1 | DICOM **Segmentation (SEG)** read + write. `BINARY` masks and `FRACTIONAL` probability/occupancy fields, on the SEG's own grid from the Functional Groups. Exposes honest quantities only (`meanValue`, `volumeAboveThreshold`, `thresholdSensitivity`) — no "accuracy" number anywhere. `LABELMAP` lands in 0.2.0. |
+| [`rt-convert-js`](packages/convert/) | 0.1.0 (unpublished) | RTSTRUCT ↔ SEG conversion. The only package allowed to depend on two domain packages. Both directions implemented; the lossy steps (fractional→binary threshold, mask→contour vectorization) are measured and recorded in provenance. |
 
-All four published packages are on npm. `dcmjs` is the only runtime dependency of
-each domain package; `rt-geometry-js` has no runtime dependencies at all.
+The four published packages are on npm; `rt-convert-js` is implemented but not yet
+published. `dcmjs` is the only runtime dependency of each domain package;
+`rt-geometry-js` has no runtime dependencies at all.
 
 ## The dependency rule
 
