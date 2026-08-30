@@ -36,6 +36,10 @@ copy); copy a slice before mutating it, and see [Web Workers](#web-workers).
 | `volumeAboveThreshold` (V20-style) | ~9 ms | single pass |
 | `dice(a, b)` | ~8.5 ms | |
 | `voxelDisagreement(a, b)` | ~8.5 ms | |
+| `union(a, b)` (boolean mask op) | ~10 ms | `intersection` / `subtract` / `xor` are the same |
+| `distanceTransformMm(mask)` (exact anisotropic EDT) | ~285 ms | 3 separable O(voxels) passes; `signed` doubles it |
+| `dilateMm(mask, 5)` / `erodeMm(mask, 5)` | ~285 ms | dominated by the distance transform |
+| `connectedComponents(mask, 26)` | ~57 ms | two-pass union-find; 6-connectivity is faster |
 | `spherePhantom` r=60 | ~216 ms | per-plane scan fill |
 
 ## rtstruct-js — grid 256 × 256 × 64, sphere ROI (~60 planar contours)

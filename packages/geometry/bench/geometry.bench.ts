@@ -4,6 +4,9 @@ import { createScalarField } from "../src/scalar-field.js";
 import { resampleField } from "../src/resample.js";
 import { histogram, valueAtVolumeFraction, volumeAboveThreshold } from "../src/histogram.js";
 import { dice, voxelDisagreement } from "../src/metrics.js";
+import { distanceTransformMm, dilateMm } from "../src/morphology.js";
+import { union } from "../src/mask-ops.js";
+import { connectedComponents } from "../src/connected-components.js";
 import { spherePhantom } from "../src/phantom.js";
 
 // A mid-size structure grid: 256 × 256 × 64 ≈ 4.2M voxels. Every per-voxel operation
@@ -67,5 +70,20 @@ describe("comparison metrics (256²×64 masks)", () => {
 describe("phantom rasterization", () => {
   bench("spherePhantom r=60 on 256²×64", () => {
     spherePhantom(structureGrid, 60);
+  });
+});
+
+describe("mask operations (256²×64)", () => {
+  bench("union(sphereA, sphereB)", () => {
+    union(sphereA, sphereB);
+  });
+  bench("distanceTransformMm(sphereA) — exact anisotropic EDT", () => {
+    distanceTransformMm(sphereA);
+  });
+  bench("dilateMm(sphereA, 5)", () => {
+    dilateMm(sphereA, 5);
+  });
+  bench("connectedComponents(sphereA, 26)", () => {
+    connectedComponents(sphereA, { connectivity: 26 });
   });
 });
