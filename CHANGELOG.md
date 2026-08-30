@@ -16,7 +16,15 @@ changelog:
 | `rtstruct-js` | 0.3.2 | published |
 | `rtdose-js` | 0.1.1 | published |
 | `dicom-seg-js` | 0.1.1 | published |
-| `rt-convert-js` | 0.1.0 | not yet published |
+| `rt-convert-js` | 0.1.0 | published |
+
+## 2026-08-30 — `rt-convert-js` 0.1.0 published
+
+- **`rt-convert-js` 0.1.0 is on npm** — RTSTRUCT ↔ SEG conversion, both directions,
+  every lossy step measured and recorded in provenance. Peers on `rt-geometry-js`
+  `^1.0.0`, `rtstruct-js` `^0.3.2`, `dicom-seg-js` `^0.1.1` (all live). Round-trip
+  validated on real TCIA data — see [`packages/convert/VALIDATION.md`](packages/convert/VALIDATION.md).
+  Completes Phase G. All five packages are now published with a resolving peer chain.
 
 ## 2026-08-30 — stability + hygiene pass
 

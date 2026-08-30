@@ -6,7 +6,8 @@ Convert between DICOM **RT Structure Sets** and DICOM **Segmentation**, built on
 [`dicom-seg-js`](https://www.npmjs.com/package/dicom-seg-js). Part of the
 [DICOM imaging toolkit](https://github.com/adeelbarki/dicom-imaging-toolkit-packages).
 
-**Status:** `0.1.0`, ready to publish (not yet on npm). Both directions are implemented and
+**Status:** published — [`rt-convert-js`](https://www.npmjs.com/package/rt-convert-js)
+`0.1.0` on npm. Both directions are implemented and
 round-trip-validated on real TCIA data — `rtstructToSeg` (RTSTRUCT ROI → `BINARY` SEG,
 voxel-for-voxel identical to the loaded ROI mask) and `segToRtstruct` (`BINARY` SEG straight
 through, `FRACTIONAL` SEG cut at a required `threshold`; the mask → contour step's fidelity
