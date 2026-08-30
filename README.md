@@ -35,7 +35,7 @@ rt-geometry-js          (no workspace dependencies, no DICOM)
 rtstruct rtdose dicom-seg   and never on another domain package
    ▲     ▲
    └──┬──┘
-  rt-convert-js          (planned — the one package that may depend on two)
+  rt-convert-js          (the one package that may depend on two domain packages)
 ```
 
 `rt-geometry-js` imports no workspace package. No domain package imports another.
@@ -44,11 +44,10 @@ This is enforced in CI by [`scripts/check-dependency-rule.mjs`](scripts/check-de
 Domain packages declare `rt-geometry-js` as a **peer dependency** (with a matching
 `devDependency` for local work). That guarantees exactly one installed copy, so
 the geometry objects the packages hand each other are identical at the identity
-level — see [`.claude/ROADMAP.md`](.claude/ROADMAP.md) §4 for the full rationale.
-Because the core is versioned additively within 0.x (`0.1.1` added resampling,
-`0.1.2` added SEG metrics), a package that peers on `^0.1.1` still resolves after
-`0.1.2` publishes. **Publish order:** the core goes to npm before any domain
-package that raised its peer range.
+level. From **1.0.0** the core follows strict SemVer;
+[`packages/geometry/CONTRACT.md`](packages/geometry/CONTRACT.md) states what the
+stability guarantee covers. **Publish order:** the core goes to npm before any
+domain package that raised its peer range.
 
 ## Validation
 
@@ -77,13 +76,11 @@ packages/
   rtstruct/     -> rtstruct-js
   rtdose/       -> rtdose-js
   dicom-seg/    -> dicom-seg-js
+  convert/      -> rt-convert-js      RTSTRUCT <-> SEG conversion
 scripts/
   check-dependency-rule.mjs           package-boundary check, run in CI
+  bundle-smoke.mjs                    browser-bundle smoke test, run in CI
 scratch/                              real DICOM for validation (gitignored)
-.claude/
-  ROADMAP.md                          forward-looking plan for the monorepo
-  IMPLEMENTATION_PLAN.md              frozen v0.1 rtstruct spec — historical
-  README.md                           internal build log / rationale
 ```
 
 ## Working in the repo

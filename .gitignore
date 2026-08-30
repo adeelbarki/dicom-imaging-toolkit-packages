@@ -5,3 +5,7 @@ dist/
 scratch/
 __pycache__/
 *.pyc
+
+# Internal planning / working notes — kept local, not part of the published history.
+# (ROADMAP.md, IMPLEMENTATION_PLAN.md, README.md postmortem, spec/ fixtures, settings.)
+.claude/
