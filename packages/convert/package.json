@@ -61,6 +61,6 @@
     "rt-geometry-js": "^1.0.0",
     "rtstruct-js": "^0.3.2",
     "typescript": "^5.6.3",
-    "vitest": "^2.1.4"
+    "vitest": "^3.2.7"
   }
 }
