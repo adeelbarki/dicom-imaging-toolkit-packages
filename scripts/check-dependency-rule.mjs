@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Build-failing guard for the monorepo dependency rules (.claude/ROADMAP.md, Phase B step 3).
+// Build-failing guard for the monorepo dependency rules.
 //
 // Package boundaries:
 //   - rt-geometry-js (the shared core) imports NO other workspace package.
