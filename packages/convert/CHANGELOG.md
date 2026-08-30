@@ -41,5 +41,5 @@ lossy step recorded in provenance.
 
 ### Depends on
 
-- `rt-geometry-js` `^1.0.0`, `rtstruct-js` `^0.3.2`, `dicom-seg-js` `^0.1.1` — all peer
+- `rt-geometry-js` `^1.0.0`, `rtstruct-js` `^0.4.0`, `dicom-seg-js` `^0.1.1` — all peer
   dependencies. This is the only toolkit package that depends on two domain packages.
