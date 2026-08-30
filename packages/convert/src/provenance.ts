@@ -35,9 +35,24 @@ export interface FractionalThresholdStep {
   readonly detail: string;
 }
 
-/** A binary mask was traced to polygon contours for RTSTRUCT. */
+/**
+ * A binary mask was traced to polygon contours for RTSTRUCT. The inverse of
+ * rasterization, and not exact: re-rasterizing the written contours onto the same grid can
+ * differ from the source mask by boundary voxels. `segToRtstruct` measures that round trip
+ * and reports it here, so the caller sees the fidelity of *their* structure rather than a
+ * generic claim.
+ */
 export interface MaskVectorizationStep {
   readonly kind: "mask-vectorization";
+  /** Occupied voxels in the source mask. */
+  readonly voxelsBefore: number;
+  /** Occupied voxels after re-rasterizing the written contours onto the same grid. */
+  readonly voxelsAfter: number;
+  /** Voxels whose membership differs between source and re-rasterized (symmetric count). */
+  readonly voxelDisagreement: number;
+  /** Dice overlap of source vs re-rasterized, in `[0, 1]`. `1` = exact (grid-aligned
+   *  shapes); curved boundaries land a little below. */
+  readonly dice: number;
   readonly detail: string;
 }
 

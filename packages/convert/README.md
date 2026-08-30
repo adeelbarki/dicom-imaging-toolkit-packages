@@ -7,8 +7,9 @@ Convert between DICOM **RT Structure Sets** and DICOM **Segmentation**, built on
 [DICOM imaging toolkit](https://github.com/adeelbarki/dicom-imaging-toolkit-packages).
 
 **Status:** in development — `0.1.0` not yet published. `rtstructToSeg` (RTSTRUCT ROI →
-`BINARY` SEG) is implemented; `segToRtstruct` and the real-file validation land in the
-following PRs.
+`BINARY` SEG) and `segToRtstruct` for **BINARY** SEG segments are implemented.
+`segToRtstruct` on a `FRACTIONAL` SEG (threshold required) and the real-file validation
+land in the following PRs.
 
 The two directions are not symmetric, and neither is lossless in general:
 
@@ -45,6 +46,22 @@ const { bytes, provenance } = rtstructToSeg(rt, "Kidney", {
 
 provenance.lossySteps; // []  — this direction is a voxel copy
 ```
+
+```ts
+import { readSeg } from "dicom-seg-js";
+import { segToRtstruct } from "rt-convert-js";
+
+const seg = readSeg(segBytes);
+const { bytes, provenance } = await segToRtstruct(seg, 1, { interpretedType: "GTV" });
+
+provenance.lossySteps[0];
+// { kind: "mask-vectorization", voxelsBefore, voxelsAfter, voxelDisagreement, dice, detail }
+// — segToRtstruct re-rasterizes what it wrote and reports the fidelity of *this* structure
+```
+
+A `FRACTIONAL` SEG throws `MissingThresholdError` — RTSTRUCT has no per-voxel value, so
+cut the field to a mask at a chosen threshold first. (A `threshold` option lands in the
+next PR.)
 
 `rt-convert-js` does **not** re-export `rtstruct-js` or `dicom-seg-js` (they each
 re-export all of `rt-geometry-js`, so re-exporting both would collide). Import `RTStruct`,

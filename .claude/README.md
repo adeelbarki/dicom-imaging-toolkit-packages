@@ -1739,3 +1739,45 @@ numeric UIDs.
 8 convert tests (CONV-RS-01..07 + CONV-VER-01). Full gate green: 224
 tests across 5 packages. `docs/CONVERSION.md` + README are PR-1 stubs
 describing the intended `segToRtstruct` contract; fleshed out in PR 4.
+
+## Phase G PR 2 — segToRtstruct BINARY + mask-vectorization step (2026-08-30)
+
+Branch `feat/rt-convert-seg-to-rtstruct`.
+
+**`segToRtstruct(seg, segmentNumber, options?)`** — `async` (calls
+`RTStruct.createFromMask` / `RTStruct.load`, both async), returns
+`{ bytes, provenance }`. One **BINARY** SEG segment → single-ROI RTSTRUCT
+on `seg.geometry`. Checks in order: `hasSegment` →
+`SegmentNotFoundError`; `type !== "BINARY"` → `MissingThresholdError`
+(FRACTIONAL has no RTSTRUCT representation; the `threshold` option is
+PR 3). Then `seg.mask(n)` → `RTStruct.createFromMask({ mask, name,
+interpretedType?, referencedFrameOfReferenceUID? })`.
+
+`roiName` default: `SegmentLabel`, else `Segment <n>`.
+`referencedFrameOfReferenceUID` default: `seg.frameOfReferenceUID`.
+`interpretedType`: caller-only, no auto-map from the SEG's coded
+category/type (vocabularies don't align; a guess fabricates a clinical
+claim).
+
+**The `mask-vectorization` step is measured, not asserted.**
+`MaskVectorizationStep` grew from `{ detail }` to `{ voxelsBefore,
+voxelsAfter, voxelDisagreement, dice, detail }`. `segToRtstruct`
+re-loads the RTSTRUCT it just wrote onto `seg.geometry` and runs
+`voxelDisagreement` / `dice` (both from `rt-geometry-js`) against the
+source mask — so provenance shows the fidelity of *that* structure.
+Grid-aligned cube: disagreement 0, Dice 1. Sphere r=16 on 2mm grid:
+Dice > 0.95 (CONV-SR-02 checks the machinery is populated, not a hard
+number — CONV-SR-01 owns the exact-path assertion).
+
+Empty segment → no throw; note "segment N ... is empty", ROI written
+with no ContourSequence, step is 0/0/0/dice-1 (dice() returns 1 for two
+empty masks).
+
+8 new tests CONV-SR-01..08. Full gate green: **232 tests** across 5
+packages. Updated `docs/CONVERSION.md` §SEG→RTSTRUCT (now describes the
+implemented BINARY path + measured step; `fractional-threshold` still
+marked "later PR"), README (second usage block + FRACTIONAL note),
+CHANGELOG.
+
+Note: `rtstruct-js` 0.3.1 still not on npm (npm has 0.3.0) — must be
+published before `rt-convert-js` 0.1.0 (PR 4), per dep-first discipline.
