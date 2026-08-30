@@ -104,6 +104,14 @@ export function writeRTStruct(options: WriteRTStructOptions): ArrayBuffer {
         ContourGeometricType: c.geometricType,
         NumberOfContourPoints: c.points.length,
         ContourData: c.points.flatMap((p) => [roundForDS(p[0]), roundForDS(p[1]), roundForDS(p[2])]),
+        ...(c.referencedSOPInstanceUIDs && c.referencedSOPInstanceUIDs.length > 0
+          ? {
+              ContourImageSequence: c.referencedSOPInstanceUIDs.map((uid) => ({
+                ReferencedSOPClassUID: CT_IMAGE_STORAGE_SOP_CLASS_UID,
+                ReferencedSOPInstanceUID: uid,
+              })),
+            }
+          : {}),
       }));
     }
     return item;
@@ -250,10 +258,17 @@ export function readRTStruct(bytes: ArrayBuffer): ParsedRTStruct {
   for (const item of asArray(naturalized["ROIContourSequence"] as readonly Record<string, unknown>[] | undefined)) {
     const refNumber = item["ReferencedROINumber"] as number;
     const contourSequence = asArray(item["ContourSequence"] as readonly Record<string, unknown>[] | undefined);
-    const contours: Contour[] = contourSequence.map((c) => ({
-      geometricType: c["ContourGeometricType"] as ContourGeometricType,
-      points: chunkPoints((c["ContourData"] as readonly number[] | undefined) ?? []),
-    }));
+    const contours: Contour[] = contourSequence.map((c) => {
+      const imageSeq = asArray(c["ContourImageSequence"] as readonly Record<string, unknown>[] | undefined);
+      const referencedSOPInstanceUIDs = imageSeq
+        .map((img) => img["ReferencedSOPInstanceUID"] as string | undefined)
+        .filter((uid): uid is string => typeof uid === "string" && uid.length > 0);
+      return {
+        geometricType: c["ContourGeometricType"] as ContourGeometricType,
+        points: chunkPoints((c["ContourData"] as readonly number[] | undefined) ?? []),
+        ...(referencedSOPInstanceUIDs.length > 0 ? { referencedSOPInstanceUIDs } : {}),
+      };
+    });
     contoursByNumber.set(refNumber, contours);
   }
 

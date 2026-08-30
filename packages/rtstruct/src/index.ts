@@ -4,7 +4,13 @@ import { rasterize } from "./contour/rasterize.js";
 import { vectorize } from "./contour/vectorize.js";
 import { readRTStruct, writeRTStruct } from "./dicom/port.js";
 import { AmbiguousRoiNameError } from "./errors.js";
-import type { DicomVolumeResult, LoadOptions, RoiHandle } from "./types.js";
+import type {
+  DicomVolumeResult,
+  LoadOptions,
+  RoiHandle,
+  SeriesGeometry,
+  SliceAssociationDetail,
+} from "./types.js";
 
 // Public building blocks. The entire rt-geometry-js surface (GridGeometry, Mask3D,
 // ScalarField3D, phantoms, metrics, histograms, geometry errors) is re-exported so
@@ -24,7 +30,19 @@ export * from "./dicom/series-geometry.js";
 
 export interface LoadParams extends LoadOptions {
   readonly rtstruct: ArrayBuffer;
-  readonly geometry: GridGeometry;
+  /**
+   * The target grid. Pass a bare {@link GridGeometry} and every contour is placed by
+   * nearest-plane geometry. Pass a {@link SeriesGeometry} (e.g. `readSeriesGeometry(...)
+   * .geometry`) and a contour whose `ContourImageSequence` names one of the series' slices
+   * is placed on *that* slice — the authoritative association DICOM intends — with geometry
+   * used only where a reference is missing or unresolvable. `roi(...).sliceAssociation` /
+   * `.sliceAssociationDetail` report which path each ROI took.
+   */
+  readonly geometry: GridGeometry | SeriesGeometry;
+}
+
+function isSeriesGeometry(g: GridGeometry | SeriesGeometry): g is SeriesGeometry {
+  return "grid" in g && "slices" in g;
 }
 
 export interface CreateFromMaskParams {
@@ -46,6 +64,7 @@ interface StoredRoi {
   readonly interpretedType: string;
   readonly mask: Mask3D;
   readonly provenance: Provenance;
+  readonly sliceAssociationDetail: SliceAssociationDetail;
   readonly diagnostics: readonly Diagnostic[];
   readonly volumeCm3: number | undefined;
 }
@@ -66,6 +85,20 @@ export class RTStruct {
   static async load(params: LoadParams): Promise<RTStruct> {
     const parsed = readRTStruct(params.rtstruct);
 
+    const grid: GridGeometry = isSeriesGeometry(params.geometry) ? params.geometry.grid : params.geometry;
+
+    // A SeriesGeometry lets contours associate to a slice by SOPInstanceUID. Map each
+    // slice to its plane index in `grid` by nearest-plane (they were built from the same
+    // positions, so the distance is ~0).
+    let sopInstanceUIDToPlaneIndex: Map<string, number> | undefined;
+    if (isSeriesGeometry(params.geometry)) {
+      sopInstanceUIDToPlaneIndex = new Map();
+      for (const slice of params.geometry.slices) {
+        sopInstanceUIDToPlaneIndex.set(slice.sopInstanceUID, grid.findNearestPlane(slice.imagePositionPatient).planeIndex);
+      }
+    }
+    const rasterizeOptions = sopInstanceUIDToPlaneIndex ? { sopInstanceUIDToPlaneIndex } : {};
+
     const documentDiagnostics: Diagnostic[] = [];
     if (parsed.missingRTROIObservations) {
       documentDiagnostics.push(
@@ -76,11 +109,24 @@ export class RTStruct {
         ),
       );
     }
+    if (
+      sopInstanceUIDToPlaneIndex !== undefined &&
+      !parsed.rois.some((roi) => roi.contours.some((c) => (c.referencedSOPInstanceUIDs?.length ?? 0) > 0))
+    ) {
+      documentDiagnostics.push(
+        createDiagnostic(
+          "MISSING_CONTOUR_IMAGE_SEQUENCE",
+          "info",
+          "a series was supplied for authoritative slice association, but no contour carries a " +
+            "ContourImageSequence — every ROI used nearest-plane geometry",
+        ),
+      );
+    }
 
     const strictness = params.strictness ?? "warn";
     const rois = new Map<number, StoredRoi>();
     for (const roi of parsed.rois) {
-      const result = rasterize(roi.contours, params.geometry);
+      const result = rasterize(roi.contours, grid, rasterizeOptions);
       const diagnostics = [...result.diagnostics];
       if (roi.contours.length === 0) {
         diagnostics.push(
@@ -91,14 +137,14 @@ export class RTStruct {
       }
       if (
         roi.referencedFrameOfReferenceUID !== undefined &&
-        params.geometry.frameOfReferenceUID !== undefined &&
-        roi.referencedFrameOfReferenceUID !== params.geometry.frameOfReferenceUID &&
+        grid.frameOfReferenceUID !== undefined &&
+        roi.referencedFrameOfReferenceUID !== grid.frameOfReferenceUID &&
         strictness !== "silent"
       ) {
         const message =
           `ROI ${JSON.stringify(roi.name)} references frame of reference ` +
           `${roi.referencedFrameOfReferenceUID}, but the supplied geometry is in ` +
-          `${params.geometry.frameOfReferenceUID}`;
+          `${grid.frameOfReferenceUID}`;
         if (strictness === "strict") throw new FrameOfReferenceMismatchError(message);
         diagnostics.push(
           createDiagnostic("FRAME_OF_REFERENCE_MISMATCH", "warning", message, { roiNumber: roi.roiNumber }),
@@ -110,6 +156,7 @@ export class RTStruct {
         interpretedType: roi.interpretedType,
         mask: result.mask,
         provenance: result.provenance,
+        sliceAssociationDetail: result.sliceAssociationDetail,
         diagnostics,
         volumeCm3: roi.volumeCm3,
       });
@@ -160,6 +207,8 @@ export class RTStruct {
       roiNumber: roi.roiNumber,
       interpretedType: roi.interpretedType,
       provenance: roi.provenance,
+      sliceAssociation: roi.provenance.sliceAssociation,
+      sliceAssociationDetail: roi.sliceAssociationDetail,
       diagnostics: roi.diagnostics,
     };
   }

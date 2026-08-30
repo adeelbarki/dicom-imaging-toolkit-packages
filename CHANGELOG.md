@@ -13,10 +13,19 @@ changelog:
 | Package | Version | npm |
 |---|---|---|
 | `rt-geometry-js` | 1.1.0 | published |
-| `rtstruct-js` | 0.3.2 | published |
+| `rtstruct-js` | 0.4.0 | published |
 | `rtdose-js` | 0.1.1 | published |
 | `dicom-seg-js` | 0.1.1 | published |
 | `rt-convert-js` | 0.1.0 | not yet published |
+
+## 2026-08-30 — RTSTRUCT SOP-reference slice association
+
+- **`rtstruct-js` → 0.4.0**: `RTStruct.load` accepts a `SeriesGeometry` and uses
+  each contour's `ContourImageSequence` `ReferencedSOPInstanceUID` for
+  authoritative contour → slice association, falling back to nearest-plane
+  geometry only where a reference is absent or unresolvable. `RoiHandle` gains
+  `sliceAssociation` / `sliceAssociationDetail`. Backward-compatible — a bare
+  `GridGeometry` behaves exactly as before. Peer stays `rt-geometry-js ^1.0.0`.
 
 ## 2026-08-30 — mask operations
 
