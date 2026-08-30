@@ -14,7 +14,7 @@ changelog:
 |---|---|---|
 | `rt-geometry-js` | 1.1.0 | published |
 | `rtstruct-js` | 0.4.0 | published |
-| `rtdose-js` | 0.2.0 | publish pending |
+| `rtdose-js` | 0.2.0 | published |
 | `dicom-seg-js` | 0.2.0 | published |
 | `rt-convert-js` | 0.1.1 | published |
 
