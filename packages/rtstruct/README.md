@@ -14,11 +14,11 @@ Round-trip volume fidelity is verified separately, against a torus phantom's
 closed-form volume.
 
 **Status:** published — [`rtstruct-js`](https://www.npmjs.com/package/rtstruct-js)
-on npm, v0.3.1. Requires the peer dependency
-[`rt-geometry-js`](https://www.npmjs.com/package/rt-geometry-js) (`^0.1.0`);
-`npm install rtstruct-js rt-geometry-js`. 0.3.1 is additive — `createFromMask`
-now carries `interpretedType` / `referencedFrameOfReferenceUID` through to the
-written file (for `rt-convert-js`). 144 tests green across both packages.
+on npm, v0.3.2. Requires the peer dependency
+[`rt-geometry-js`](https://www.npmjs.com/package/rt-geometry-js) (`^1.0.0`);
+`npm install rtstruct-js rt-geometry-js`. 0.3.2 only bumps that peer range to the
+stabilised core (no API change); 0.3.1 added `interpretedType` /
+`referencedFrameOfReferenceUID` to `createFromMask` (for `rt-convert-js`).
 
 **Validated against real DICOM files**, not just phantoms — 5 vendors/tools, real
 keyhole/nested contour distributions, real round-trip fidelity. See
@@ -290,11 +290,13 @@ becomes a breaking change.
 
 ## Dependencies
 
-`dcmjs` (the only DICOM dependency) pulls in a
-high-severity transitive advisory via `adm-zip`, used only by dcmjs features this
-library never touches (`dicom/port.ts` uses `DicomDict`/`DicomMessage`/
-`DicomMetaDictionary` only) — accepted as a known tradeoff, revisit if dcmjs
-ships a fix.
+`dcmjs` is the only DICOM dependency (`dicom/port.ts` uses `DicomDict` /
+`DicomMessage` / `DicomMetaDictionary` only). It transitively pins
+`adm-zip@0.5.17`, which carries a high-severity advisory
+([GHSA-xcpc-8h2w-3j85](https://github.com/advisories/GHSA-xcpc-8h2w-3j85)) in a
+zip code path this library never reaches. The monorepo root `package.json`
+`overrides` it to the patched `adm-zip@0.6.0`, so `npm audit` is clean; a
+standalone consumer who wants the same guarantee can add the same override.
 
 ## License
 

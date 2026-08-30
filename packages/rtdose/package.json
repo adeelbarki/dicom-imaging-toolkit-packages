@@ -58,7 +58,7 @@
     "rt-geometry-js": "^1.0.0",
     "rtstruct-js": "*",
     "typescript": "^5.6.3",
-    "vitest": "^2.1.4"
+    "vitest": "^3.2.7"
   },
   "dependencies": {
     "dcmjs": "^0.52.0"
