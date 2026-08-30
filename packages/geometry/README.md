@@ -12,9 +12,11 @@ built by one meets the same `GridGeometry` implementation in another.
 
 **Standard pinned (for the doc references):** DICOM PS3.3 **2026c**.
 
-**Status:** published — [`rt-geometry-js`](https://www.npmjs.com/package/rt-geometry-js) 0.1.2 on npm. Extracted from `rtstruct-js` 0.2.1. See `CHANGELOG.md`.
-**0.1.1** is the latest published; **0.1.2** (this repo, see `CHANGELOG.md`) publishes
-alongside `dicom-seg-js` 0.1.0, which peers `^0.1.2`. Extracted from `rtstruct-js` 0.2.1.
+**Status:** published — [`rt-geometry-js`](https://www.npmjs.com/package/rt-geometry-js)
+on npm. **1.0.0** (this repo, see `CHANGELOG.md`) is a stability promotion with no code
+change from 0.1.2 — the shared core now follows strict SemVer, and domain packages peer on
+`^1.0.0`. What the guarantee covers is spelled out in [`CONTRACT.md`](CONTRACT.md).
+Extracted from `rtstruct-js` 0.2.1.
 
 ## Install
 
