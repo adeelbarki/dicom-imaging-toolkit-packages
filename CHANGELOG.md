@@ -12,11 +12,20 @@ changelog:
 
 | Package | Version | npm |
 |---|---|---|
-| `rt-geometry-js` | 1.0.0 | published |
+| `rt-geometry-js` | 1.1.0 | published |
 | `rtstruct-js` | 0.3.2 | published |
 | `rtdose-js` | 0.1.1 | published |
 | `dicom-seg-js` | 0.1.1 | published |
 | `rt-convert-js` | 0.1.0 | not yet published |
+
+## 2026-08-30 — mask operations
+
+- **`rt-geometry-js` → 1.1.0** (additive): boolean masks (`union` / `intersection`
+  / `subtract` / `xor` / `complement`), physical morphology (`distanceTransformMm`,
+  `dilateMm` / `erodeMm`), single-mask `centroid` / `boundingBox`, `crop` / `pad`,
+  and connected components (`connectedComponents` / `largestComponent`). 41 new
+  tests. `^1.0.0` covers it — domain packages unchanged. This is the geometry
+  half of what both reviews asked for.
 
 ## 2026-08-30 — stability + hygiene pass
 

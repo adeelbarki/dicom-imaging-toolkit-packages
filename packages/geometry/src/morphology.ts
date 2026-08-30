@@ -1,6 +1,7 @@
 import { createScalarField } from "./scalar-field.js";
+import type { ScalarField3D } from "./scalar-field.js";
 import { maskFromDense } from "./mask3d.js";
-import type { GridGeometry, Mask3D, ScalarField3D } from "./types.js";
+import type { GridGeometry, Mask3D } from "./types.js";
 
 const INF = 1e20;
 
@@ -173,8 +174,9 @@ export function dilateMm(mask: Mask3D, mm: number): Mask3D {
 }
 
 /**
- * Shrink `mask` by `mm` in physical space: a set voxel is kept only if it is at least `mm`
- * from the nearest background voxel. True Euclidean erosion, anisotropic by `pixelSpacing`;
+ * Shrink `mask` by `mm` in physical space: a set voxel is kept only if it is **more than**
+ * `mm` from the nearest background voxel. True Euclidean erosion, the exact dual of
+ * {@link dilateMm} (`dilateMm(A, r) = ¬erodeMm(¬A, r)`), anisotropic by `pixelSpacing`;
  * see {@link distanceTransformMm} for the through-plane caveat. `erodeMm(mask, 0)` returns
  * a copy of `mask`.
  */
@@ -184,6 +186,6 @@ export function erodeMm(mask: Mask3D, mm: number): Mask3D {
   const fg = densify(mask);
   const d2 = distanceField(mask, true); // squared distance to the background
   const out = new Uint8Array(fg.length);
-  for (let i = 0; i < fg.length; i++) if (fg[i] !== 0 && (d2[i] as number) >= sq) out[i] = 1;
+  for (let i = 0; i < fg.length; i++) if (fg[i] !== 0 && (d2[i] as number) > sq) out[i] = 1;
   return maskFromDense(mask.geometry, out);
 }

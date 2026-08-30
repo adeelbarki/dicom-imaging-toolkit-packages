@@ -1,5 +1,46 @@
 # Changelog
 
+## [1.1.0] - 2026-08-30
+
+Additive — `^1.0.0` covers it, domain packages need no change. New mask
+operations, the set both reviews asked for (booleans, physical morphology,
+single-mask measurement).
+
+### New
+
+- **Boolean masks** (`mask-ops.ts`): `union`, `intersection`, `subtract`, `xor`,
+  `complement`. Each requires both masks on an equivalent grid
+  (`GridMismatchError` otherwise), returns a fresh `Mask3D`.
+- **Physical morphology** (`morphology.ts`):
+  - `distanceTransformMm(mask, { signed? })` → `ScalarField3D`: exact Euclidean
+    distance (mm) to the nearest set voxel, anisotropic by `pixelSpacing`
+    (Felzenszwalb–Huttenlocher, O(voxels)). The through-plane axis uses the
+    grid's **mean** plane spacing — an approximation on a non-uniformly spaced
+    grid. `signed` makes inside negative.
+  - `dilateMm(mask, mm)` / `erodeMm(mask, mm)` — true Euclidean dilation/erosion
+    by a mm-radius ball, implemented as a threshold on the distance field. Exact
+    duals (`dilateMm(A, r) = ¬erodeMm(¬A, r)`); radius `0` is identity.
+- **Single-mask measurement**:
+  - `centroid(mask)` (`metrics.ts`) → `{ index, patientMm }`, volume-weighted the
+    same way `centroidDisplacementMm` is. Throws `IndeterminateCentroidError` on
+    an empty mask.
+  - `boundingBox(mask)` (`mask-ops.ts`) → inclusive index box `{ min, max }` or
+    `null` for an empty mask.
+  - `crop(mask, box?)` → a `Mask3D` on a sub-grid (plane subset + shifted
+    in-plane origin), every kept voxel's physical location preserved. Defaults to
+    the mask's own bounding box.
+  - `pad(mask, margin)` → a `Mask3D` on a grid grown by `margin` voxels per side.
+    Column/row padding is always allowed; **plane** padding needs a
+    uniformly-spaced grid with ≥ 2 planes.
+- **Connected components** (`connected-components.ts`):
+  `connectedComponents(mask, { connectivity: 6 | 26 })` → `{ labels, count,
+  sizes }` (two-pass union-find; labels numbered 1..count in descending size
+  order); `largestComponent(mask)` → `Mask3D`.
+
+41 new tests (analytic checks — `dilateMm(r)` volume vs `4/3·π·r³`, boolean-op
+identities on cube phantoms, connected-component counts, crop/pad physical-
+location preservation). `CONTRACT.md` updated with the new surface.
+
 ## [1.0.0] - 2026-08-30
 
 **No code change from 0.1.2.** This release only promotes the shared core to a
