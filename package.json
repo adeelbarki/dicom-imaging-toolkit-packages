@@ -30,6 +30,10 @@
     "check:deps": "node scripts/check-dependency-rule.mjs",
     "test": "npm run check:deps && npm run test --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "build": "npm run build --workspaces --if-present"
+    "build": "npm run build --workspaces --if-present",
+    "bundle:smoke": "node scripts/bundle-smoke.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.12"
   }
 }

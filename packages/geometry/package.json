@@ -44,12 +44,16 @@
     "pretest": "node ../../scripts/check-dependency-rule.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
+    "bench": "vitest bench --run",
     "typecheck": "tsc --noEmit",
     "build": "tsc -p tsconfig.build.json",
-    "prepublishOnly": "npm run build && npm test"
+    "prepublishOnly": "npm run build && npm test",
+    "test:browser": "vitest run --config vitest.browser.config.ts"
   },
   "devDependencies": {
     "@types/node": "^26.2.0",
+    "@vitest/browser": "^3.2.7",
+    "playwright": "^1.62.1",
     "typescript": "^5.6.3",
     "vitest": "^3.2.7"
   }

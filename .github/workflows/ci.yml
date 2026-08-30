@@ -47,3 +47,30 @@ jobs:
       # Catches the published-build resolution path (tsconfig.build.json clears
       # the `paths` alias, so rt-geometry-js must resolve as a real dep).
       - run: npm run build
+
+  browser:
+    # Proves the browser story: rt-geometry-js's full suite runs in headless
+    # Chromium, and every package bundles for platform:browser. Separate job so a
+    # browser-download hiccup doesn't mask a real failure in `check`.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - run: npm ci
+
+      # dist/ is what the bundle smoke test bundles.
+      - run: npm run build
+
+      # Every package bundles for platform:browser (rt-geometry-js with no
+      # externals; the domain packages with dcmjs external + the known node:module
+      # shim for loading it).
+      - run: npm run bundle:smoke
+
+      # rt-geometry-js's unit suite, unchanged, in a real browser.
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:browser --workspace rt-geometry-js
