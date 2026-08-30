@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dice, voxelDisagreement, centroidDisplacementMm } from "../../src/metrics.js";
+import { centroid, dice, voxelDisagreement, centroidDisplacementMm } from "../../src/metrics.js";
 import { createGridGeometry, createUniformGrid } from "../../src/grid-geometry.js";
 import { maskFromDense } from "../../src/mask3d.js";
 import { GridMismatchError, FrameOfReferenceMismatchError, IndeterminateCentroidError } from "../../src/errors.js";
@@ -102,5 +102,40 @@ describe("METRIC-006: centroid weights occupied voxels by physical volume on irr
     const ref = maskFromDense(refGrid, refData);
 
     expect(centroidDisplacementMm(mask, ref)).toBeLessThan(1e-9);
+  });
+});
+
+describe("METRIC-007: centroid() reports a single mask's centre in index and patient space", () => {
+  it("index-space centroid is the mean voxel index on a uniform grid", () => {
+    const g = createUniformGrid({ rows: 5, columns: 5, planeCount: 3, pixelSpacing: [1, 1], sliceSpacingMm: 1 });
+    const data = new Uint8Array(5 * 5 * 3);
+    // voxels at (1,1,0) and (3,3,2) -> mean index (2,2,1)
+    data[0 * 25 + 1 * 5 + 1] = 1;
+    data[2 * 25 + 3 * 5 + 3] = 1;
+    const c = centroid(maskFromDense(g, data));
+    expect(c.index[0]).toBeCloseTo(2, 9);
+    expect(c.index[1]).toBeCloseTo(2, 9);
+    expect(c.index[2]).toBeCloseTo(1, 9);
+    const expectedPatient = g.indexToPatient(2, 2, 1);
+    for (let i = 0; i < 3; i++) expect(c.patientMm[i]).toBeCloseTo(expectedPatient[i]!, 9);
+  });
+
+  it("empty mask throws IndeterminateCentroidError", () => {
+    expect(() => centroid(emptyMask())).toThrow(IndeterminateCentroidError);
+  });
+
+  it("patientMm agrees with centroidDisplacementMm against a reference at that point", () => {
+    const g = axialGrid([0, 1, 2]);
+    const data = new Uint8Array(g.columns * g.rows * g.planes.length);
+    data[0] = 1;
+    data[2 * g.columns * g.rows] = 1;
+    const mask = maskFromDense(g, data);
+    const refGrid = axialGrid([1]);
+    const refData = new Uint8Array(refGrid.columns * refGrid.rows);
+    refData[0] = 1;
+    const ref = maskFromDense(refGrid, refData);
+    const c = centroid(mask);
+    expect(centroidDisplacementMm(mask, ref)).toBeLessThan(1e-9);
+    expect(c.patientMm[2]).toBeCloseTo(1, 9);
   });
 });

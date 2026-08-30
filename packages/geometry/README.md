@@ -13,10 +13,11 @@ built by one meets the same `GridGeometry` implementation in another.
 **Standard pinned (for the doc references):** DICOM PS3.3 **2026c**.
 
 **Status:** published — [`rt-geometry-js`](https://www.npmjs.com/package/rt-geometry-js)
-on npm. **1.0.0** (this repo, see `CHANGELOG.md`) is a stability promotion with no code
-change from 0.1.2 — the shared core now follows strict SemVer, and domain packages peer on
-`^1.0.0`. What the guarantee covers is spelled out in [`CONTRACT.md`](CONTRACT.md).
-Extracted from `rtstruct-js` 0.2.1.
+on npm. **1.0.0** was a stability promotion (strict SemVer; domain packages peer on
+`^1.0.0` — see [`CONTRACT.md`](CONTRACT.md)). **1.1.0** (this repo, see `CHANGELOG.md`)
+adds mask operations — booleans, physical morphology (`dilateMm`/`erodeMm`,
+`distanceTransformMm`), `centroid`/`boundingBox`, `crop`/`pad`, connected components — all
+additive. Extracted from `rtstruct-js` 0.2.1.
 
 ## Install
 
@@ -35,7 +36,10 @@ npm install rt-geometry-js
 | Resampling | `sampleFieldAt` (trilinear / nearest, at a physical point), `resampleField`, `resampleMask` — for crossing grids (dose ↔ structure) |
 | Histograms / DVH | `histogram`, `volumeAboveThreshold`, `valueAtVolumeFraction`, `meanValue`, `thresholdSensitivity` |
 | Phantoms | `cubePhantom`, `spherePhantom`, `torusPhantom`, `analyticVolumeMm3` |
-| Metrics | `dice`, `voxelDisagreement`, `centroidDisplacementMm` |
+| Metrics | `dice`, `voxelDisagreement`, `centroidDisplacementMm`, `centroid` |
+| Mask ops | `union`, `intersection`, `subtract`, `xor`, `complement`; `boundingBox`, `crop`, `pad` |
+| Morphology | `distanceTransformMm` (signed optional), `dilateMm`, `erodeMm` — mm-radius, anisotropic |
+| Components | `connectedComponents` (6/26), `largestComponent` |
 | Diagnostics | `createDiagnostic`, `Diagnostic` and `Provenance` (each with a `.redact()` that strips UIDs) |
 | Vectors | `add`, `sub`, `scale`, `dot`, `cross`, `normalize`, `distance`, `length`, `angleBetween` |
 | Errors | `ResourceLimitError`, `NonParallelPlanesError`, `NonOrthogonalBasisError`, `IndeterminateVolumeError`, `GridMismatchError`, `IndeterminateCentroidError`, `FrameOfReferenceMismatchError`, `NotImplementedError` |

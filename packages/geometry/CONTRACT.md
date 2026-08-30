@@ -50,11 +50,21 @@ confidence-histogram engine the domain packages call rather than reimplement.
 
 ### Metrics, phantoms, vectors, tolerance
 
-`dice`, `voxelDisagreement`, `centroidDisplacementMm`; `cubePhantom`,
+`dice`, `voxelDisagreement`, `centroidDisplacementMm`, `centroid`; `cubePhantom`,
 `spherePhantom`, `torusPhantom`, `analyticVolumeMm3`; the `vec3` helpers;
 `DEFAULT_TOLERANCE` and `DEFAULT_MAX_VOXELS` (the *names* and their meaning — the
 numeric values may be refined in a minor if measured data warrants, which is not
 considered breaking).
+
+### Mask operations (1.1.0)
+
+`union`, `intersection`, `subtract`, `xor`, `complement`; `boundingBox`, `crop`,
+`pad`; `distanceTransformMm`, `dilateMm`, `erodeMm`; `connectedComponents`,
+`largestComponent`, and the `Connectivity` / `IndexBox` / `Margin` /
+`ConnectedComponents` / `Centroid` shapes. Documented behaviour, including that
+`distanceTransformMm`'s through-plane axis uses the grid's **mean** plane spacing
+(an approximation on non-uniform grids) and that `dilateMm` / `erodeMm` are exact
+duals with radius `0` an identity.
 
 ### Errors
 

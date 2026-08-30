@@ -105,3 +105,47 @@ export function centroidDisplacementMm(a: Mask3D, b: Mask3D): number {
   assertCompatibleFrame(a, b);
   return distance(centroidMm(a), centroidMm(b));
 }
+
+export interface Centroid {
+  /** Continuous `[column, row, planeIndex]` — the mean voxel index (plane axis weighted
+   *  by plane thickness on an irregular grid, so it is not a plain index mean there). */
+  readonly index: Vec3;
+  /** The same point in patient space (mm). */
+  readonly patientMm: Vec3;
+}
+
+/**
+ * The volume centroid of a single mask, in both index and patient space. Voxels are
+ * weighted by the physical volume they represent (see {@link centroidDisplacementMm}).
+ * Throws {@link IndeterminateCentroidError} for an empty mask — `[0,0,0]` would be
+ * indistinguishable from a real ROI at the origin.
+ */
+export function centroid(mask: Mask3D): Centroid {
+  const grid = mask.geometry;
+  let sc = 0;
+  let sr = 0;
+  let sk = 0;
+  let totalWeight = 0;
+  let n = 0;
+  for (let planeIndex = 0; planeIndex < grid.planes.length; planeIndex++) {
+    const weight = grid.planes.length === 1 ? 1 : planeThicknessMm(grid, planeIndex);
+    const buffer = mask.getSliceBuffer(planeIndex);
+    for (let row = 0; row < grid.rows; row++) {
+      for (let column = 0; column < grid.columns; column++) {
+        if (buffer[row * grid.columns + column] === 0) continue;
+        sc += column * weight;
+        sr += row * weight;
+        sk += planeIndex * weight;
+        totalWeight += weight;
+        n++;
+      }
+    }
+  }
+  if (n === 0) {
+    throw new IndeterminateCentroidError(
+      "cannot compute a centroid for an empty mask — there is no ROI to locate",
+    );
+  }
+  const index: Vec3 = [sc / totalWeight, sr / totalWeight, sk / totalWeight];
+  return { index, patientMm: centroidMm(mask) };
+}
