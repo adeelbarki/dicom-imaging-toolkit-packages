@@ -27,7 +27,7 @@ copy.
 | [`rtstruct-js`](packages/rtstruct/) | 0.4.0 | DICOM **RT Structure Set** (RTSTRUCT) read + write. Contour → mask rasterization that handles all three hole encodings (nested `CLOSED_PLANAR`, `CLOSEDPLANAR_XOR`, self-touching keyhole) identically. Round-trip volume fidelity checked against phantom closed-form volumes. |
 | [`rtdose-js`](packages/rtdose/) | 0.1.1 | DICOM **RTDOSE** read + dose-volume histograms. D/V/mean/min/max queries against a structure mask, dose sampled at a physical point, cumulative DVH. Every result carries the resampling / interpolation / partial-volume method used to compute it. **Research and QA tooling — not a treatment planning system.** |
 | [`dicom-seg-js`](packages/dicom-seg/) | 0.2.0 | DICOM **Segmentation (SEG)** read + write — `BINARY`, `FRACTIONAL` (probability/occupancy), and `LABELMAP`, on the SEG's own grid from the Functional Groups. `writeSeg` supports sparse frame coverage. Exposes honest quantities only (`meanValue`, `volumeAboveThreshold`, `thresholdSensitivity`) — no "accuracy" number anywhere. |
-| [`rt-convert-js`](packages/convert/) | 0.1.0 | RTSTRUCT ↔ SEG conversion. The only package allowed to depend on two domain packages. Both directions implemented; the lossy steps (fractional→binary threshold, mask→contour vectorization) are measured and recorded in provenance. |
+| [`rt-convert-js`](packages/convert/) | 0.1.1 | RTSTRUCT ↔ SEG conversion. The only package allowed to depend on two domain packages. Both directions implemented; the lossy steps (fractional→binary threshold, mask→contour vectorization) are measured and recorded in provenance. |
 
 All five packages are on npm. `dcmjs` is the only runtime dependency of each domain
 package; `rt-geometry-js` has no runtime dependencies at all.

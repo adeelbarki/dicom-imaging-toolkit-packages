@@ -13,10 +13,21 @@ changelog:
 | Package | Version | npm |
 |---|---|---|
 | `rt-geometry-js` | 1.1.0 | published |
-| `rtstruct-js` | 0.4.0 | publish pending |
+| `rtstruct-js` | 0.4.0 | published |
 | `rtdose-js` | 0.1.1 | published |
-| `dicom-seg-js` | 0.2.0 | publish pending |
-| `rt-convert-js` | 0.1.0 | published |
+| `dicom-seg-js` | 0.2.0 | published |
+| `rt-convert-js` | 0.1.1 | publish pending |
+
+## 2026-08-30 — reviews-phase-0 split complete
+
+- **`rtstruct-js` 0.4.0 and `dicom-seg-js` 0.2.0 published.** The
+  `feat/reviews-phase-0-geometry-1.0` branch is now landed on `main` as nine
+  reviewed PRs (geometry 1.0.0 promotion, `.claude/` untracked, deps/audit,
+  root changelog + badges, bench + browser CI + bundle smoke, `rt-convert-js`
+  validation, geometry 1.1.0 mask ops, rtstruct 0.4.0, dicom-seg 0.2.0).
+- **`rt-convert-js` → 0.1.1** (no code change): peers catch up to
+  `rtstruct-js ^0.4.0` / `dicom-seg-js ^0.2.0`. (The rtdose supersampling work
+  from that branch stays parked — it was unfinished.)
 
 ## 2026-08-30 — SEG LABELMAP + sparse write
 
