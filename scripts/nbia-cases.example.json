@@ -1,0 +1,14 @@
+{
+  "_comment": "Copy to scripts/nbia-cases.json (gitignored) and fill in real SeriesInstanceUIDs from `nbia-download.mjs list`. One case per folder; put the CT/MR series first, then RTSTRUCT, then RTDOSE / SEG.",
+  "outDir": "scratch/data-dose",
+  "cases": [
+    {
+      "name": "GammaPlan-BrainTR-GK-001",
+      "series": [
+        "REPLACE_WITH_MR_OR_CT_SeriesInstanceUID",
+        "REPLACE_WITH_RTSTRUCT_SeriesInstanceUID",
+        "REPLACE_WITH_RTDOSE_SeriesInstanceUID"
+      ]
+    }
+  ]
+}

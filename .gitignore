@@ -9,3 +9,6 @@ __pycache__/
 # Internal planning / working notes — kept local, not part of the published history.
 # (ROADMAP.md, IMPLEMENTATION_PLAN.md, README.md postmortem, spec/ fixtures, settings.)
 .claude/
+
+# Local NBIA download manifest (real SeriesInstanceUIDs) — keep the .example one tracked.
+scripts/nbia-cases.json
