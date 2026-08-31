@@ -12,9 +12,10 @@ dependency [`rt-geometry-js`](https://www.npmjs.com/package/rt-geometry-js) (`^1
 `npm install dicom-seg-js rt-geometry-js`.
 
 **Validated against real DICOM files**, not just its own fixtures — `dicom-seg-js`'s
-reconstruction is **voxel-exact vs `highdicom`** on real TCIA SEG files (C4KC-KiTS 2-segment
-BINARY, NSCLC-Radiomics 6-segment BINARY, ISPY1 FRACTIONAL): 728 / 728 per-slice checksums
-identical. See
+reconstruction is **voxel-exact vs `highdicom`** on **7 real TCIA SEG files from 4 writer
+libraries** (QIICR `dcmqi`, GE workstation, `highdicom`, `pydicom-seg`): BINARY 1- to
+6-segment, plus a genuinely graded `FRACTIONAL`/`OCCUPANCY` field (ACRIN-6698 VOLSER,
+7 distinct raw values). **983 / 983 per-`(segment, plane)` slice checksums identical.** See
 [VALIDATION.md](https://github.com/adeelbarki/dicom-imaging-toolkit-packages/blob/main/packages/dicom-seg/VALIDATION.md)
 (this link works from both GitHub and the npm page).
 

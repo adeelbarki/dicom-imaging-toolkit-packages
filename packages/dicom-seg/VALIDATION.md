@@ -19,8 +19,11 @@ publication.
 [`scripts/validation/`](scripts/validation/) — `metrics-dicom-seg-js.ts`,
 `metrics-highdicom.py`, `compare.mjs` — and are runnable against any local `.dcm` SEG file
 (see that directory's README for usage, including the `pip install highdicom` note;
-`pydicom-seg` turned out to be unusable, it needs `pydicom < 2.4`). They are not part of
-the published npm package (only `dist/` ships).
+`pydicom-seg` as a reference *reader* was unusable — it needs `pydicom < 2.4` — though a
+`pydicom-seg`-*written* file is one of the inputs below). Not part of the published npm
+package (only `dist/` ships). The newer files were pulled with
+[`scripts/nbia-download.mjs`](../../scripts/nbia-download.mjs) (guest token, no TCIA
+account).
 
 ## Data sources
 
@@ -29,12 +32,19 @@ the published npm package (only `dist/` ships).
 | C4KC-KiTS | 1 (`KiTS-00007`, 2 segments) | QIICR `dcmqi` converter; `SEMIAUTOMATIC` | CC BY 3.0 | https://doi.org/10.7937/TCIA.2019.IX49E8NX |
 | NSCLC-Radiomics | 1 (`LUNG1-005`, 6 segments) | QIICR `dcmqi` converter; `MANUAL` + `SEMIAUTOMATIC` (region-growing) | CC BY-NC 3.0 | https://doi.org/10.7937/K9/TCIA.2015.PF0M9REI |
 | ISPY1 | 1 (`ISPY1_1004`, 1 segment) | GE workstation; `SEMIAUTOMATIC` (PE threshold + connectivity), `SeriesDescription` "PE Segmentation thresh=90" | CC BY 3.0 | https://doi.org/10.7937/K9/TCIA.2016.HdHpgJLK |
+| EAY131 | 1 (`EAY131-7617225`, 1 segment, PET/CT) | **`highdicom`** (`Manufacturer` = `highdicom`); BINARY, explicit `SegmentsOverlap NO` | (per-series) | https://doi.org/10.7937/q9rn-m510 |
+| CT4Harmonization-Multicentric | 1 (`liver`, **6 segments**) | **`pydicom-seg`** (`Manufacturer` = `pydicom-seg`); BINARY liver-lesion partition, `SegmentsOverlap NO` | CC BY 4.0 | https://doi.org/10.7937/M0PB-BH69 |
+| ACRIN-6698 | 2 (`373346` VOLSER 72-plane, `782716` DWI 4-plane) | GE workstation; **`FRACTIONAL` / `OCCUPANCY`** — `373346` genuinely graded (7 distinct raw values 1–49, 4.7 M voxels), `782716` all-`1` | CC BY 4.0 | https://doi.org/10.7937/tcia.kk02-6d95 |
 
-3 files, 9 segments, 3 distinct authoring pipelines, **728 individual `(segment, plane)`
-slices** compared. Two `BitsAllocated 1` BINARY files (2- and 6-segment, 512×512, 61 and
-91 planes) and one 8-bit `FRACTIONAL` file (256×256, 60 planes). One collection is CC BY-NC
-(NonCommercial) — only aggregate, derived statistics from it appear here; no data is
-redistributed. NSCLC-Radiomics is the same collection as the `rtstruct-js` keyhole scan.
+7 files, 18 segments, **4 distinct SEG writer libraries** (QIICR `dcmqi`, GE workstation,
+`highdicom`, `pydicom-seg`), **983 `(segment, plane)` slices** compared. BINARY:
+`BitsAllocated 1` continuous bitstream (dcmqi 2- and 6-segment; `highdicom` 1-segment) and
+byte-aligned (`pydicom-seg` 6-segment). FRACTIONAL: 8-bit, `OCCUPANCY` — one genuinely
+graded field (ACRIN-6698 VOLSER) and three effectively-binary (ISPY1 at 255, ACRIN-6698 DWI
+at 1). Two collections are CC BY-NC / CC BY 3.0 NonCommercial — only aggregate derived
+statistics appear here, no data redistributed. NSCLC-Radiomics is the same collection as
+the `rtstruct-js` keyhole scan; the newer files were pulled with `scripts/nbia-download.mjs`
+(guest token, no account).
 
 ## Method
 
@@ -52,24 +62,34 @@ checksum match is a real match, not a coincidence of two loose reconstructions.
 
 ## Finding 1: BINARY reconstruction is voxel-exact
 
-| File | Segments | Slices compared | Checksum-identical | Σ\|count Δ\| |
-|---|---|--:|--:|--:|
-| C4KC-KiTS `KiTS-00007` | Kidney, Mass | 122 | 122 | 0 |
-| NSCLC-Radiomics `LUNG1-005` | Esophagus, GTV, Heart, Lung-L, Lung-R, Spinal cord | 546 | 546 | 0 |
+| File | Writer | Segments | Slices | Checksum-identical | Σ\|count Δ\| |
+|---|---|---|--:|--:|--:|
+| C4KC-KiTS `KiTS-00007` | dcmqi | Kidney, Mass | 122 | 122 | 0 |
+| NSCLC-Radiomics `LUNG1-005` | dcmqi | Esophagus, GTV, Heart, Lung-L, Lung-R, Spinal cord | 546 | 546 | 0 |
+| EAY131 `7617225` | `highdicom` | PANCREAS-1 | 49 | 49 | 0 |
+| CT4Harmonization `liver` | `pydicom-seg` | normal×2, cyst×2, hemangioma, metastasis | 130 | 130 | 0 |
 
-668 slices, no disagreement. dcmjs's `BitArray.unpack` over the continuous bitstream, plus
-`dicom-seg-js`'s frame → `(segment, plane)` assembly, produces the same 0/1 array highdicom
-does — across a 2-segment and a 6-segment file. Confirms the continuous-bitstream
-interpretation (no inter-frame byte padding) against real `dcmqi`-generated exports.
+847 slices, no disagreement, across **four writer libraries**. `dicom-seg-js`'s
+continuous-bitstream unpack + frame → `(segment, plane)` assembly produces the same 0/1
+array `highdicom` does for dcmqi (2- and 6-segment), `highdicom` (1-segment), and
+`pydicom-seg` (6-segment) exports alike — all four write a continuous `BitsAllocated 1`
+stream, none triggered `BINARY_FRAMES_BYTE_ALIGNED`. The `pydicom-seg` liver file also
+confirms a 6-way BINARY partition reads back with the right per-segment identities and
+coded types.
 
-## Finding 2: FRACTIONAL 8-bit reconstruction is voxel-exact
+## Finding 2: FRACTIONAL 8-bit reconstruction is voxel-exact — including a genuinely graded field
 
-| File | Segment | Slices | Checksum-identical | raw value sum | raw value max |
+| File | Segment | Slices | Checksum-identical | distinct raw values | raw max |
 |---|---|--:|--:|--:|--:|
-| ISPY1 `ISPY1_1004` | PE Tumor | 60 | 60 | 22 876 305 (= ref) | 255 (= ref) |
+| ISPY1 `ISPY1_1004` | PE Tumor | 60 | 60 | 1 (all 255) | 255 |
+| ACRIN-6698 `373346` | VOLSER Analysis Mask | 72 | 72 | **7 (1–49)** | 49 |
+| ACRIN-6698 `782716` | DWI Tumor Mask | 4 | 4 | 1 (all 1) | 1 |
 
-`rawField(n)` and the non-zero footprint match highdicom exactly, per-slice byte order
-included.
+`rawField(n)` and the non-zero footprint match `highdicom` exactly on all three, per-slice
+byte order included. **ACRIN-6698 `373346` is the graded case the earlier sample lacked** —
+a 4.7 M-voxel VOLSER occupancy map with intermediate values (1, 2, 17, 32, 33, 34, 49), not
+a threshold. `field(n)` rescales it by `MaximumFractionalValue` (255) to `[0, 1]`; the raw
+integers round-trip exactly.
 
 ## Finding 3: a real "OCCUPANCY" SEG that is actually a binary mask
 
@@ -79,33 +99,59 @@ is "PE Segmentation thresh=90" — it is a thresholded percent-enhancement mask 
 FRACTIONAL container, not a graded occupancy field. `dicom-seg-js` fires
 `FRACTIONAL_VALUES_LOOK_BINARY` for it (≥ 98% of non-zero values at
 `MaximumFractionalValue`). This is the mislabelled-fractional case the roadmap
-(`docs/FRACTIONAL-SEG.md` §1, roadmap §7.1) anticipated — found on the first FRACTIONAL
-file sampled.
+(`docs/FRACTIONAL-SEG.md` §1, roadmap §7.1) anticipated.
+
+**ACRIN-6698 `782716` (DWI Tumor Mask) is also effectively binary** — every non-zero voxel
+is `1` — but `FRACTIONAL_VALUES_LOOK_BINARY` does **not** fire, because the heuristic keys
+on clustering at `MaximumFractionalValue` (255), and this file clusters at the *minimum*
+(1/255). A binary mask stored as FRACTIONAL can sit at either end. Broadening the heuristic
+to "one distinct non-zero value" is a noted follow-up (see below); the reconstruction
+itself is voxel-exact regardless.
 
 ## Finding 4: fractional types in the wild
 
 Of TCIA's ~34 collections that publish DICOM SEG, the large majority are `BINARY`.
-`FRACTIONAL` shows up mainly in the breast-MRI collections (ISPY1/ISPY2, ACRIN-6698). In
-the sample checked the one FRACTIONAL file was `OCCUPANCY` — and, per Finding 3, actually
-binary. No genuinely graded `PROBABILITY` field (a raw model head) turned up, consistent
-with FRACTIONAL SEG being rare and usually a thresholded export. **Treat a FRACTIONAL SEG
-as graded only after checking its value distribution** (`thresholdSensitivity`, or the
-`FRACTIONAL_VALUES_LOOK_BINARY` diagnostic).
+`FRACTIONAL` shows up mainly in the breast-MRI collections (ISPY1/ISPY2, ACRIN-6698), and
+every FRACTIONAL file seen is `OCCUPANCY` — none `PROBABILITY`. Of the three FRACTIONAL
+files now checked, **one is genuinely graded** (ACRIN-6698 VOLSER, 7 distinct values) and
+two are binary masks in a FRACTIONAL container (ISPY1 at max, ACRIN-6698 DWI at min). A
+raw, un-thresholded `PROBABILITY` model head still hasn't turned up on TCIA — consistent
+with those living in research repos, not clinical archives. **Treat a FRACTIONAL SEG as
+graded only after checking its value distribution** (`thresholdSensitivity`, or the
+`FRACTIONAL_VALUES_LOOK_BINARY` diagnostic — with the min-clustering caveat in Finding 3).
 
 ## Finding 5: geometry matches
 
 Rows, columns, plane count, pixel spacing, and every plane z-position agree between the two
-reconstructions on all three files. `dicom-seg-js`'s `GridGeometry` — built from the
-distinct Per-Frame `ImagePositionPatient` values, deduped and sorted along the normal — is
-the grid highdicom reconstructs onto.
+reconstructions on all 7 files (grids from 256×256×4 to 512×512×91). `dicom-seg-js`'s
+`GridGeometry` — built from the distinct Per-Frame `ImagePositionPatient` values, deduped
+and sorted along the normal — is the grid `highdicom` reconstructs onto.
 
-## What this does not prove
+## What this does and does not prove
 
-- **LABELMAP** — out of scope for 0.1.0 (→ 0.2.0); not exercised.
-- **Graded PROBABILITY / OCCUPANCY** — no genuinely graded FRACTIONAL file in the sample.
-  `rawField` / `field` rescaling is covered by the round-trip unit tests, not by real data.
-- **`SegmentsOverlap YES`** — not present in the sampled files.
-- **The byte-aligned-per-frame BINARY variant** (`BINARY_FRAMES_BYTE_ALIGNED`) — synthetic
-  coverage only; not seen in the wild yet.
-- **Writing** — `writeSeg` output was not round-tripped through highdicom here; that is a
-  candidate for a follow-up.
+Covered now: 4 writer libraries (QIICR `dcmqi`, GE workstation, `highdicom`, `pydicom-seg`),
+BINARY 1- to 6-segment, one genuinely graded FRACTIONAL/OCCUPANCY field, geometry on grids
+from 4 to 91 planes. Not covered:
+
+- **Graded `PROBABILITY`** — a raw model-head SEG (as opposed to graded `OCCUPANCY`, now
+  covered). None on TCIA; `field` rescaling for PROBABILITY is round-trip-unit-tested only.
+- **`SegmentsOverlap YES`** — the sampled files are all `NO` / `UNDEFINED`.
+- **LABELMAP against a third-party writer** — 0.2.0 `readSeg` handles it, but no non-`writeSeg`
+  LABELMAP file has been checked (they are scarce on TCIA).
+- **The byte-aligned-per-frame BINARY variant** (`BINARY_FRAMES_BYTE_ALIGNED`) — all real
+  files sampled use the continuous bitstream; synthetic coverage only.
+- **Old 3D Slicer / QIN-challenge SEG** (`1.2.276.0.7230010…` UIDs, ~2014) — one such file
+  (`LIDC-IDRI-0314`, "QIN CT challenge alg01") omits the per-frame
+  `SegmentIdentificationSequence`; `dicom-seg-js` rejects it with `MalformedSegmentationError`
+  and **`highdicom` 0.28 also fails** (an internal duplicate-SOP-UID error). Treated as a
+  malformed file, not a reader gap; a lenient single-segment fallback is a possible
+  follow-up.
+- **Writing** — `writeSeg` output was not round-tripped through `highdicom` here.
+
+### Follow-ups noted
+
+- Broaden `FRACTIONAL_VALUES_LOOK_BINARY` to also fire when a FRACTIONAL field has a single
+  distinct non-zero value at the low end (ACRIN-6698 DWI: all `1`), not only near
+  `MaximumFractionalValue`.
+- Consider a single-segment fallback when a non-LABELMAP frame omits
+  `SegmentIdentificationSequence` (old Slicer/QIN files), behind a `warning` diagnostic.
