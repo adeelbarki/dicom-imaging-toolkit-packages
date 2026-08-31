@@ -82,24 +82,35 @@ TCIA. Full method and the harness are in
 [`../VALIDATION.md`](../VALIDATION.md) / [`../scripts/validation/`](../scripts/validation/);
 the headline:
 
-| File (TCIA) | Type | Segments | Result |
-|---|---|---|---|
-| C4KC-KiTS `KiTS-00007` | BINARY | 2 (Kidney, Mass) | **voxel-exact** — 122/122 slice checksums identical |
-| NSCLC-Radiomics `LUNG1-005` | BINARY | 6 (Esophagus, GTV, Heart, L/R Lung, Cord) | **voxel-exact** — 546/546 |
-| ISPY1 `ISPY1_1004` | FRACTIONAL / OCCUPANCY | 1 (PE Tumor) | **voxel-exact** — 60/60; raw value sum 22 876 305 matched exactly |
+| File (TCIA) | Writer | Type | Segments | Result |
+|---|---|---|---|---|
+| C4KC-KiTS `KiTS-00007` | dcmqi | BINARY | 2 (Kidney, Mass) | **voxel-exact** — 122/122 |
+| NSCLC-Radiomics `LUNG1-005` | dcmqi | BINARY | 6 (organs) | **voxel-exact** — 546/546 |
+| EAY131 `7617225` | `highdicom` | BINARY | 1 (Pancreas) | **voxel-exact** — 49/49 |
+| CT4Harmonization `liver` | `pydicom-seg` | BINARY | 6 (liver lesions) | **voxel-exact** — 130/130 |
+| ISPY1 `ISPY1_1004` | GE | FRACTIONAL / OCCUPANCY | 1 (PE Tumor) | **voxel-exact** — 60/60; all values 255 (binary in disguise) |
+| ACRIN-6698 `373346` | GE | FRACTIONAL / OCCUPANCY | 1 (VOLSER) | **voxel-exact** — 72/72; **genuinely graded**, 7 distinct raw values 1–49 |
+| ACRIN-6698 `782716` | GE | FRACTIONAL / OCCUPANCY | 1 (DWI) | **voxel-exact** — 4/4; all values 1 (binary at the low end) |
 
-728 `(segment, plane)` slices, every one byte-for-byte identical to highdicom's
-reconstruction (BINARY bit-unpacking included).
+983 `(segment, plane)` slices across 4 writer libraries, every one byte-for-byte identical
+to `highdicom`'s reconstruction (BINARY bit-unpacking included).
 
 ### Fractional types in the wild
 
 Of the TCIA collections that publish DICOM SEG, most are `BINARY`. `FRACTIONAL` appears
-mainly in the breast-MRI collections (ISPY1/ISPY2, ACRIN-6698). In the sample checked, the
-declared fractional type was **`OCCUPANCY`** — but the `ISPY1_1004` file's non-zero values
-are **all exactly 255**: it is a binary mask stored as FRACTIONAL, not a graded occupancy
-field. `dicom-seg-js` emits a `FRACTIONAL_VALUES_LOOK_BINARY` diagnostic for exactly this
-case (≥ 98% of non-zero values pinned at `MaximumFractionalValue`). No genuinely graded
-`PROBABILITY` field turned up in the sample; that is consistent with FRACTIONAL SEG being
-rare and usually a thresholded export rather than a raw model head. Treat a FRACTIONAL SEG
-as graded only after checking its value distribution (`thresholdSensitivity`, or the
-diagnostic).
+mainly in the breast-MRI collections (ISPY1/ISPY2, ACRIN-6698), and every FRACTIONAL file
+seen declares **`OCCUPANCY`**, never `PROBABILITY`. Of three FRACTIONAL files checked:
+
+- **ACRIN-6698 `373346` (VOLSER)** — genuinely graded: 7 distinct raw values (1, 2, 17, 32,
+  33, 34, 49) over 4.7 M voxels. `field(n)` rescales by `MaximumFractionalValue`; `rawField`
+  round-trips exactly.
+- **ISPY1 `1004`** — all non-zero values `255`. A thresholded percent-enhancement mask in a
+  FRACTIONAL container. `FRACTIONAL_VALUES_LOOK_BINARY` fires (≥ 98 % pinned at
+  `MaximumFractionalValue`).
+- **ACRIN-6698 `782716` (DWI)** — all non-zero values `1`. Also effectively binary, but the
+  diagnostic does **not** fire — it keys on the *max*, not the *min*. Broadening it to catch
+  a single distinct low-end value is a noted follow-up in `../VALIDATION.md`.
+
+A raw, un-thresholded `PROBABILITY` model head still hasn't appeared on TCIA. Treat a
+FRACTIONAL SEG as graded only after checking its value distribution (`thresholdSensitivity`,
+or the diagnostic — with the min-clustering caveat).
