@@ -1,32 +1,50 @@
-# Pulling real DICOM from login-gated TCIA collections
+# Pulling real DICOM from TCIA collections
 
 `nbia-download.mjs` fetches DICOM series by `SeriesInstanceUID` into the gitignored
 `scratch/` tree, so the `packages/*/scripts/validation/` harnesses can run against real
-data from **restricted** TCIA collections (a second/third planning system for `rtdose-js`,
-more SEG pipelines for `dicom-seg-js`, …).
+data (a second/third planning system for `rtdose-js`, more SEG pipelines for
+`dicom-seg-js`, …).
 
 Nothing here ships. The bearer token is only ever sent as an `Authorization: Bearer`
 header — never logged, never in a URL.
 
 ---
 
-## 1. Create a TCIA account
+## 1. You often need *no* account — try a guest token first
 
-<https://www.cancerimagingarchive.net/> → **Login / Register** → **Create Account**. Free,
-instant.
+Fully public collections (most of TCIA, including `Vestibular-Schwannoma-SEG` — Elekta
+GammaPlan RTDOSE) download with an anonymous **guest** token:
 
-## 2. Get access to the restricted collection
+```sh
+export NBIA_TOKEN=$(
+  curl -s -d "username=nbia_guest&password=&client_id=NBIA&grant_type=password" \
+    https://services.cancerimagingarchive.net/nbia-api/oauth/token | jq -r .access_token
+)
+node scripts/nbia-download.mjs list --collection Vestibular-Schwannoma-SEG --modality RTDOSE
+```
 
-Fully public collections need nothing beyond an account. **Restricted** ones (e.g.
-`Brain-TR-GammaKnife`) require a signed license:
+If `list` returns rows, you're set — skip to step 5. Only **restricted / limited-access**
+collections (`Brain-TR-GammaKnife`, …) return nothing to guest and need steps 2–4.
 
-1. Open the collection's TCIA wiki page → **Data Access** section.
+## 2. Create a TCIA account (restricted collections only)
+
+The account link is **not** on the marketing homepage any more. Use the **NBIA Data
+Portal**: <https://nbia.cancerimagingarchive.net/nbia-search/> → let it finish
+"Initializing…" → **Login** (top-right) → **"Create a new account"** in the dialog. If that
+link isn't visible, email **help@cancerimagingarchive.net** (or text +1 385-275-8242) and
+ask them to create the account — they do this routinely. The same credentials drive the
+REST API `oauth/token`.
+
+## 3. Get the restricted-license grant
+
+1. Open the collection's TCIA wiki page → **Data Access**.
 2. Download the **TCIA Restricted License Agreement** PDF, sign it.
 3. Email it to `help@cancerimagingarchive.net` from the address on your account.
-4. Wait for confirmation that your account has been granted access (often 1–2 business
-   days). Until then the API returns HTTP 403 for that collection.
+4. Wait for confirmation your account was granted access (often 1–2 business days). Until
+   then the API returns HTTP 403 for that collection, and `getCollectionValues` /
+   `list` won't show it.
 
-## 3. Mint a bearer token (valid 2 hours)
+## 4. Mint a bearer token — restricted collections (valid 2 hours)
 
 The token endpoint takes your account username + password as form fields. Keep the
 password out of your shell history:
@@ -59,7 +77,7 @@ unset NBIA_PASS
 If a later command prints **HTTP 401**, the token expired — repeat this step. Downloaded
 cases are skipped on re-run, so it just resumes.
 
-## 4. Find the SeriesInstanceUIDs
+## 5. Find the SeriesInstanceUIDs
 
 ```sh
 # every RTDOSE series in a collection:
@@ -75,7 +93,7 @@ A restricted collection returns **nothing** (and isn't in `getCollectionValues`)
 account is granted access — that's expected, not a typo. The exact collection string is on
 the collection's TCIA wiki page; once access lands, `list` shows its series.
 
-## 5. Build a manifest and download
+## 6. Build a manifest and download
 
 ```sh
 cp scripts/nbia-cases.example.json scripts/nbia-cases.json   # gitignored
@@ -102,7 +120,7 @@ the harnesses classify by. Also written:
 
 The harnesses ignore both (they only read `*.dcm`).
 
-## 6. Re-run the harnesses
+## 7. Re-run the harnesses
 
 See each package's `scripts/validation/README.md`. In short:
 

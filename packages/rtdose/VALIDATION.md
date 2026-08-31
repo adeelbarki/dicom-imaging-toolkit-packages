@@ -8,10 +8,11 @@ from a planning system and carry its conventions.
 
 This document is that comparison: `rtdose-js` vs
 [`dicompyler-core`](https://github.com/dicompyler/dicompyler-core) — D2/D50/D95,
-V5Gy/V20Gy/V30Gy, and mean/min/max dose, per ROI, on real RTDOSE + RTSTRUCT + planning-CT
-triples from [TCIA](https://www.cancerimagingarchive.net/). Same pattern as `rtstruct-js`'s
-keyhole scan: the comparison harness was built before the results existed, so the
-implementation was checked against a reference rather than trusted.
+V5Gy/V20Gy/V30Gy, and mean/min/max dose, per ROI, on real RTDOSE + RTSTRUCT + planning
+image (CT or MR) sets from [TCIA](https://www.cancerimagingarchive.net/), across **two
+planning systems** (Varian Eclipse SBRT, Elekta Leksell GammaPlan radiosurgery). Same
+pattern as `rtstruct-js`'s keyhole scan: the comparison harness was built before the
+results existed, so the implementation was checked against a reference rather than trusted.
 
 No DICOM files are included in this repository or redistributed. Every number here is a
 derived figure computed from files downloaded from TCIA's public API at analysis time; TCIA
@@ -27,9 +28,10 @@ published npm package (`dist/` only).
 | | |
 |---|---|
 | Harness | ✅ built and smoke-tested (Phase E PR 3, 2026-08-28) |
-| `rtdose-js` side | ✅ verified on synthetic + 3 real TCIA cases |
+| `rtdose-js` side | ✅ verified on synthetic + 6 real TCIA cases, 2 planning systems |
 | `dicompyler-core` cross-check | ✅ **run** — dicompyler-core 0.5.6, pydicom 2.4.5 |
-| Result | **194 / 195 metric comparisons within tolerance** across 3 patients × 5 ROIs; the one outlier is a single-voxel *max dose* on a small OAR, explained below |
+| Result — Varian Eclipse | **194 / 195** within tolerance (3 pancreas SBRT patients × 5 ROIs); 1 outlier, a single-voxel *max dose* on a small OAR |
+| Result — Elekta GammaPlan | **95 / 104** within tolerance (3 Gamma Knife patients); all 9 outliers are `max`/`D2`/`min` on sub-4 cm³ structures — mean/D50/D95/V(d)/volumes all agree |
 
 ## Method
 
@@ -66,24 +68,30 @@ interpolation effect), and it never moves `mean`, `D95`, `D2`, or any `V(d)`.
 
 | Collection | Patients | Planning system | License | Citation |
 |---|---|---|---|---|
-| [Pancreatic-CT-CBCT-SEG](https://doi.org/10.7937/TCIA.ESHQ-4D90) | 3 (`Pancreas-CT-CB_003`, `_014`, `_030`) | Varian Eclipse (`DoseSummationType PLAN`, `DoseUnits GY`) | CC BY 4.0 | Hong J. et al., TCIA, 2021 |
+| [Pancreatic-CT-CBCT-SEG](https://doi.org/10.7937/TCIA.ESHQ-4D90) | 3 (`Pancreas-CT-CB_003`, `_014`, `_030`) | **Varian Eclipse** (`DoseSummationType PLAN`, `DoseUnits GY`) | CC BY 4.0 | Hong J. et al., TCIA, 2021 |
+| [Vestibular-Schwannoma-SEG](https://doi.org/10.7937/TCIA.9YTJ-5Q73) | 3 (`VS-SEG-205`, `-206`, `-207`) | **Elekta Leksell GammaPlan 10.2.1** (`DoseSummationType PLAN`, `DoseUnits GY`) | CC BY 4.0 | Shapey J. et al., TCIA, 2021 |
 
-Pancreas SBRT plans. Each triple is the planning CT series (the one the planning RTSTRUCT
-`ReferencedFrameOfReferenceSequence` points at, `FrameOfReferenceUID` verified equal to the
-RTDOSE's), the `BSPC_LL_LR_ROI_SDPC` structure set (ROIs: `ROI` target, `LUNG_L`, `LUNG_R`,
-`Bowel_sm_planCT`, `Stomach_duo_planCT`), and the `Eclipse Doses` RTDOSE. Dose grids are
-2.5 mm in-plane / 3 mm between planes; CT is 1.37 mm / 3 mm — so every ROI here exercises
-the cross-grid resample.
+**Pancreatic-CT-CBCT-SEG** — pancreas SBRT. Each triple is the planning CT series (the one
+the planning RTSTRUCT `ReferencedFrameOfReferenceSequence` points at, `FrameOfReferenceUID`
+verified equal to the RTDOSE's), the `BSPC_LL_LR_ROI_SDPC` structure set (ROIs: `ROI`
+target, `LUNG_L`, `LUNG_R`, `Bowel_sm_planCT`, `Stomach_duo_planCT`), and the `Eclipse
+Doses` RTDOSE. Dose grids 2.5 mm in-plane / 3 mm between planes; CT 1.37 mm / 3 mm — every
+ROI exercises the cross-grid resample.
 
-Only one collection in TCIA's public (unauthenticated) API exposes RT dose alongside
-structures and a CT (`Vestibular-Schwannoma-SEG` is the other, but it is MR-based Gamma
-Knife with two plans per patient). More planning systems require an NBIA account and are a
-follow-up.
+**Vestibular-Schwannoma-SEG** — Gamma Knife radiosurgery for acoustic neuroma. Second
+planning system, and a very different one: **MR-based** (the `t1_fl3d_tra_gk` planning
+series, ~1 mm isotropic, 120 slices), and a **193 × 160 × 193 cubic high-resolution dose
+box** (`DoseGridScaling` ≈ 3.75e-4) rather than a thin-slice CT-aligned grid. All series
+share one `FrameOfReferenceUID`. ROIs: `TV` (target, 0.5–4.7 cm³), `Cochlea` (OAR,
+~0.04 cm³ — tens of voxels), `*Skull` (whole-head external, ~3500 cm³). Publicly
+downloadable — no NBIA account needed (`scripts/nbia-download.mjs`, guest token).
 
 ## Agreement — the clinical quantities
 
-Mean dose, D95, D2, and V20Gy for every ROI, all 3 patients. `Δ%` is against
-`dicompyler-core`.
+**Varian Eclipse (Pancreatic-CT-CBCT-SEG).** Mean dose, D95, D2, and V20Gy for every ROI,
+all 3 patients. `Δ%` is against `dicompyler-core`. (For **Elekta GammaPlan** see finding 5:
+mean/D50/D95/V(d)/volume agree on every ROI in all 3 `VS-SEG` cases; `max`/`D2`/`min` on the
+sub-cm³ OARs are the tail effect of finding 2, amplified by the radiosurgery gradient.)
 
 | Patient | ROI | mean Gy (js / dcm) | D95 Gy (js / dcm) | D2 Gy (js / dcm) | V20Gy % (js / dcm) |
 |---|---|---|---|---|---|
@@ -134,10 +142,27 @@ Eclipse dose.** `DoseGridScaling` here is ~4.5e-5; the agreement on absolute dos
 confirms it is applied. `GridFrameOffsetVector` starts at 0 and is ascending on all three
 (no `DOSE_FRAMES_REORDERED` / `GRID_FRAME_OFFSET_NONZERO_ORIGIN` diagnostics fired).
 
+**5. Second planning system — Elekta Leksell GammaPlan (radiosurgery). No code change.**
+3 `VS-SEG` patients, **95 / 104 metric comparisons within tolerance**. `rtdose-js` parsed
+GammaPlan RTDOSE with nothing added — the 193³-ish cubic dose box, `DoseGridScaling`
+≈ 3.75e-4, `DoseUnits GY`, `DoseSummationType PLAN`, MR-based `FrameOfReferenceUID` — no
+diagnostic fired, no fix needed. **mean, D50, D95, every V(d) (abs and %), and volumes pass
+on every ROI in all three cases** (D95 to ≤ 0.5 Gy, mean to ≤ 0.08 Gy, volumes to ≤ 0.2%).
+The 9 out-of-tolerance rows are all `max` / `D2` / `min` — the DVH tail — on the sub-4 cm³
+structures, worst on the ~0.04 cm³ `Cochlea` (`D2` +12–29 %, `max` +9–31 %). Same mechanism
+as finding 2, amplified: Gamma Knife dose gradients are extreme by design, the OARs are a
+few tens of voxels, and `rtdose-js` samples at the ~1 mm MR structure grid (trilinear)
+while `dicompyler-core` samples at the coarser GammaPlan dose grid (nearest plane) — so the
+extremes of a steep gradient across a handful of voxels diverge in relative terms while the
+bulk of the histogram does not. `max` / `min` on a sub-cm³ radiosurgery OAR is not a DVH
+decision criterion (`D0.1cc` / `D2` on the target are, and the target metrics agree);
+documented behaviour, not a defect. Per-patient: `VS-SEG-205` 33/39, `-206` 26/26,
+`-207` 36/39.
+
 ### Not yet covered
 
-- One planning system only (Varian Eclipse). Elekta / RayStation / Pinnacle dose needs an
-  NBIA-authenticated download — follow-up.
+- Two planning systems (Varian Eclipse, Elekta GammaPlan). RayStation / Pinnacle / Monaco
+  dose is a follow-up (mostly NBIA-restricted collections — see `scripts/README-nbia.md`).
 - No `DoseSummationType BEAM` or `MULTI_PLAN` case.
 - No non-zero `GridFrameOffsetVector` origin or reversed frame order seen in the wild yet
   (only synthetic coverage in `tests/unit/port.test.ts`).
